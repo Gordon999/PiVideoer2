@@ -1,7 +1,7 @@
 # Pi_Videoer2
 
 A python script to capture Videos from Pi v1,2,3 , HQ or GS cameras (or Arducam 16/64MP AF cameras), triggered by motion , external trigger or manually. 
-Uses Raspberry OS BULLSEYE or BOOKWORM (for BOOKWORM switch to X11 not Wayland), rpicam-vid, and Picamera2.
+Uses Raspberry OS BULLSEYE or BOOKWORM (for BOOKWORM switch to X11 not Wayland) and Picamera2.
 
 It will capture videos at 25fps at 1920 x 1080, or on a GS camera 1465 x 1088.
 
