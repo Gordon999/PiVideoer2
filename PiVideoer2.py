@@ -47,13 +47,7 @@ e_trig2   = 20
 # DISABLE Pi FAN CONTROL in Preferences > Performance to GPIO 14 !!
 fan      = 14
 fan_ctrl = 1  # 0 for OFF. 
-
-# save MP4 to SD / USB, 0 = SD Card, 1 = USB 
-movtousb = 0
-
-# USB cameras
-auto_detect = 1
-    
+   
 
 # set default config parameters
 v_crop        = 20      # size of vertical detection window *
@@ -64,7 +58,7 @@ detection     = 10      # % of pixels detected to trigger, in % *
 det_high      = 100     # max % of pixels detected to trigger, in %  *
 fps           = 25      # set camera fps *
 mp4_fps       = 25      # set MP4 fps *
-mode          = 1       # set camera mode ['off','normal','sport'] *
+mode          = 1       # set camera mode *
 speed         = 80000   # set manual shutter speed in mS x 1000 *
 gain          = 0       # set gain , 0 = AUTO *
 brightness    = 0       # set camera brightness *
@@ -126,7 +120,6 @@ dc            = 0
 q             = 0
 of            = 0
 txtvids       = []
-en_photo      = 0
 restart2      = 0
 timer2        = time.monotonic()
 res2          = 0
@@ -157,12 +150,10 @@ camids        = ['','ov5647','imx219','imx708','imx477','imx519','arduc','imx296
 max_gains     = [64,     255,      40,      64,      88,      64,      64,      64]
 max_shutters  = [0,   max_v1, max_v2,   max_v3,  max_hq,max_16mp,max_64mp,  max_gs]
 mags          = [64,     255,      40,      64,      88,      64,      64,      64]
-modes         = ['off','normal','short','long']
+modes         = ['manual','normal','short','long']
 meters        = ['CentreWeighted','Spot','Matrix']
 awbs          = ['auto','tungsten','fluorescent','indoor','daylight','cloudy','custom']
-denoises      = ['off','cdn_off','cdn_fast','cdn_hq']
-vwidths       = []
-vheights      = []
+denoises      = ['off','fast','HQ']
 col_filters   = ['RED','GREEN','BLUE','FULL']
 noise_filters = ['OFF','LOW','HIGH']
 v3_f_modes    = ['Manual','Auto','Continuous']
@@ -338,13 +329,11 @@ def Camera_Version():
       a = int(pre_width/2)
   if b > pre_height - h_crop:
       b = int(pre_height/2)
-
+  # set video size
   if Pi_Cam == 7:
-      # set video size
       vid_width  = 1456
       vid_height = 1088
   else:
-      # set video size
       vid_width  = 1920
       vid_height = 1080
 
@@ -439,12 +428,19 @@ ltime = 0
 
 # setup camera parameters
 if Pi_Cam == 3:
-    picam2.set_controls({"AfMode": controls.AfModeEnum.Continuous})
+    if v3_f_mode == 0:
+        picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
+    elif v3_f_mode == 1:
+        picam2.set_controls({"AfMode": controls.AfModeEnum.Auto, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
+        picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+    elif v3_f_mode == 2:
+        picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
+        picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
 picam2.set_controls({"FrameRate": fps})
 if awb < 6:
-    picam2.set_controls({"AwbEnable": 1})
+    picam2.set_controls({"AwbEnable": True})
 else:
-    picam2.set_controls({"AwbEnable": 0})
+    picam2.set_controls({"AwbEnable": False})
 if awb == 0:
     picam2.set_controls({"AwbMode": controls.AwbModeEnum.Auto})
 elif awb == 1:
@@ -462,21 +458,20 @@ elif awb == 6:
     cg = (red,blue)
     picam2.set_controls({"ColourGains": cg})
 if mode == 0:
-    picam2.set_controls({"AeEnable": 0})
+    picam2.set_controls({"AeEnable": False})
     picam2.set_controls({"ExposureTime": speed})
 else:
-    picam2.set_controls({"AeEnable": 1})
+    picam2.set_controls({"AeEnable": True})
     if mode == 1:
          picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Normal})
     elif mode == 2:
          picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Short})
     elif mode == 3:
          picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Long})
-picam2.set_controls({"ExposureTime": speed})
-picam2.set_controls({"AnalogueGain": gain})
 picam2.set_controls({"Brightness": brightness/10})
 picam2.set_controls({"Contrast": contrast/10})
 picam2.set_controls({"ExposureValue": ev/10})
+picam2.set_controls({"AnalogueGain": gain})
 if meter == 0:
     picam2.set_controls({"AeMeteringMode": controls.AeMeteringModeEnum.CentreWeighted})
 elif meter == 1:
@@ -487,6 +482,12 @@ picam2.set_controls({"Saturation": saturation/10})
 picam2.set_controls({"Sharpness": sharpness})
 cg = (red,blue)
 picam2.set_controls({"ColourGains": cg})
+if denoise == 0:
+    picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Off})
+elif denoise == 1:
+    picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Fast})
+elif denoise == 2:
+    picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
 
 # check for usb_stick
 USB_Files  = []
@@ -504,7 +505,6 @@ if len(USB_Files) > 0:
 Videos = []
 frames = 0
 ram_frames = 0
-trig = 1
 
 # SD card
 Videos = glob.glob(h_user + '/Videos/*.mp4')
@@ -719,11 +719,11 @@ while True:
                     line = file.readline()
             if sync[4] == "System clock synchronized: yes":
                 synced = 1
-                if menu == 7:
+                if menu == 4:
                     text(0,9,3,1,1,str(sd_hour) + ":00",14,7)
             else:
                 synced = 0
-                if menu == 7:
+                if menu == 4:
                     text(0,9,0,1,1,str(sd_hour)+":00",14,7)
         except:
             pass
@@ -1320,10 +1320,10 @@ while True:
                    a = h_crop
                 if b - v_crop < 0:
                    b = v_crop
-                fxx = int(a - h_crop)
-                fxy = int(b + v_crop)
-                fxz = fxx + h_crop
-                fxa = fxy + v_crop
+                fxx = int((a - h_crop) * (vid_width/pre_width))
+                fxy = int((b + v_crop) * (vid_height/pre_height))
+                fxz = int((fxx + h_crop) * (vid_width/pre_width))
+                fxa = int((fxy + v_crop) * (vid_height/pre_height))
                 picam2.set_controls( { "AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
                 text(0,0,3,1,1,"Spot",14,7)
                 oldimg = []
@@ -1475,7 +1475,7 @@ while True:
                         text(0,8,3,1,1,"Long",14,7)
                     save_config = 1
 
-                elif g == 9 and menu == 7:
+                elif g == 9 and menu == 4:
                     # SHUTDOWN HOUR
                     if h == 1:
                         sd_hour +=1
@@ -1537,11 +1537,11 @@ while True:
                     else:
                         mode -=1
                     if mode == 0:
-                        picam2.set_controls({"AeEnable": 0})
+                        picam2.set_controls({"AeEnable": False})
                         picam2.set_controls({"ExposureTime": speed})
                         text(0,2,3,1,1,str(int(speed/1000)),14,7)
                     else:
-                        picam2.set_controls({"AeEnable": 1})
+                        picam2.set_controls({"AeEnable": True})
                         text(0,2,0,1,1,str(int(speed/1000)),14,7)
                         if mode == 1:
                             picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Normal})
@@ -1645,14 +1645,14 @@ while True:
                     # PRE FRAMES
                     if (h == 1 and event.button == 1) or event.button == 4:
                         pre_frames +=1
-                        pre_frames = min(pre_frames,100)
+                        pre_frames = min(pre_frames,1000)
                     else:
                         pre_frames -=1
                         pre_frames = max(pre_frames,0)
                     text(0,3,3,1,1,str(pre_frames),14,7)
                     save_config = 1
                     
-                elif g == 8 and menu == 1:
+                elif g == 7 and menu == 2:
                     # SATURATION
                     if (h == 1 and event.button == 1) or event.button == 4:
                         saturation +=1
@@ -1661,7 +1661,7 @@ while True:
                         saturation -=1
                         saturation = max(saturation,0)
                     picam2.set_controls({"Saturation": saturation/10})
-                    text(0,8,3,1,1,str(saturation),14,7)
+                    text(0,7,3,1,1,str(saturation),14,7)
                     save_config = 1
                    
                 elif g == 9 and menu == 7 and scientif == 1:
@@ -1699,25 +1699,25 @@ while True:
                         awb -=1
                         awb = max(awb,0)
                     if awb == 0:
-                        picam2.set_controls({"AwbEnable": 1})
+                        picam2.set_controls({"AwbEnable": True})
                         picam2.set_controls({"AwbMode": controls.AwbModeEnum.Auto})
                     elif awb == 1:
-                        picam2.set_controls({"AwbEnable": 1})
+                        picam2.set_controls({"AwbEnable": True})
                         picam2.set_controls({"AwbMode": controls.AwbModeEnum.Tungsten})
                     elif awb == 2:
-                        picam2.set_controls({"AwbEnable": 1})
+                        picam2.set_controls({"AwbEnable": True})
                         picam2.set_controls({"AwbMode": controls.AwbModeEnum.Fluorescent})
                     elif awb == 3:
-                        picam2.set_controls({"AwbEnable": 1})
+                        picam2.set_controls({"AwbEnable": True})
                         picam2.set_controls({"AwbMode": controls.AwbModeEnum.Indoor})
                     elif awb == 4:
-                        picam2.set_controls({"AwbEnable": 1})
+                        picam2.set_controls({"AwbEnable": True})
                         picam2.set_controls({"AwbMode": controls.AwbModeEnum.Daylight})
                     elif awb == 5:
-                        picam2.set_controls({"AwbEnable": 1})
+                        picam2.set_controls({"AwbEnable": True})
                         picam2.set_controls({"AwbMode": controls.AwbModeEnum.Cloudy})
                     elif awb == 6:
-                        picam2.set_controls({"AwbEnable": 0})
+                        picam2.set_controls({"AwbEnable": False})
                         picam2.set_controls({"AwbMode": controls.AwbModeEnum.Custom})
                         cg = (red,blue)
                         picam2.set_controls({"ColourGains": cg})
@@ -1756,7 +1756,7 @@ while True:
                     text(0,6,3,1,1,str(blue)[0:3],14,7)
                     save_config = 1
 
-                elif g == 7 and menu == 2:
+                elif g == 8 and menu == 1:
                     # SHARPNESS
                     if(h == 1 and event.button == 1) or event.button == 4:
                         sharpness +=1
@@ -1765,17 +1765,24 @@ while True:
                         sharpness -=1
                         sharpness = max(sharpness,0)
                     picam2.set_controls({"Sharpness": sharpness})
-                    text(0,7,3,1,1,str(sharpness),14,7)
+                    text(0,8,3,1,1,str(sharpness),14,7)
                     save_config = 1
                    
                 elif g == 8 and menu == 2:
                     # DENOISE
                     if (h == 1 and event.button == 1) or event.button == 4:
                         denoise +=1
-                        denoise = min(denoise,3)
+                        denoise = min(denoise,2)
                     else:
                         denoise -=1
                         denoise = max(denoise,0)
+                    if denoise == 0:
+                        picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Off})
+                    elif denoise == 1:
+                        picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Fast})
+                    elif denoise == 2:
+                        picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
+
                     text(0,8,3,1,1,str(denoises[denoise]),14,7)
                     save_config = 1
                     
@@ -1784,7 +1791,6 @@ while True:
                     if menu == 3:
                         text(0,6,3,1,1,"VIDEO ",14,7)
                         text(0,7,3,1,1,"ALL VIDS ",14,7)
-                    trig = 1
                     if (h == 1 and event.button == 1) or event.button == 4:
                         q +=1
                         if q > len(Jpegs)-1:
@@ -1810,9 +1816,8 @@ while True:
                             windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
                             pygame.display.update()
 
-                elif en_photo == 0 and g == 6 and menu == 3 and show == 1 and frames + ram_frames > 0 and (frames > 0 or ram_frames > 0) and event.button == 3:
+                elif g == 6 and menu == 3 and show == 1 and frames + ram_frames > 0 and (frames > 0 or ram_frames > 0) and event.button == 3:
                     # DELETE A VIDEO
-                    trig = 1
                     try:
                       fontObj = pygame.font.Font(None, 70)
                       msgSurfaceObj = fontObj.render("DELETING....", False, (255,0,0))
@@ -1826,18 +1831,17 @@ while True:
                         pass
                     Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
                     frames     = len(Videos)
-                    Jpegs = glob.glob('/run/shm/2???????????.mp4')
-                    Jpegs.sort()
-                    for x in range(0,len(Jpegs)):
-                         Videos.append(Jpegs[x])
+                    Rideos = glob.glob('/run/shm/2???????????.mp4')
+                    Rideos.sort()
+                    for x in range(0,len(Rideos)):
+                         Videos.append(Rideos[x])
                     Videos.sort()
-                    ram_frames = len(Jpegs)
+                    ram_frames = len(Rideos)
                     if q > len(Videos)-1:
                         q -=1
                     if len(Videos) > 0:
                       try:
-                        tlen = int(fps*(v_length/1000)) + pre_frames
-                        image = pygame.image.load(Videos[q])
+                        image = pygame.image.load(Videos[q][:-4] + ".jpg")
                         cropped = pygame.transform.scale(image, (pre_width,pre_height))
                         windowSurfaceObj.blit(cropped, (0, 0))
                         fontObj = pygame.font.Font(None, 25)
@@ -1870,10 +1874,8 @@ while True:
                     oldimg = []
                     time.sleep(0.5)
                         
-                elif en_photo == 0 and g == 7 and menu == 3:
+                elif g == 7 and menu == 3:
                     # DELETE ALL VIDEOS
-                    of = 0
-                    trig = 1
                     text(0,3,3,1,1," ",14,7)
                     if event.button == 3:
                         fontObj = pygame.font.Font(None, 70)
@@ -1908,7 +1910,7 @@ while True:
                         show = 0
                         oldimg = []
 
-                elif en_photo == 0 and g == 8 and menu == 3 and ( frames > 0 or ram_frames > 0):
+                elif g == 8 and menu == 3 and ( frames > 0 or ram_frames > 0):
                     # SHOW ALL videos
                     text(0,8,2,0,1,"STOP",14,7)
                     text(0,8,2,1,1,"     ",14,7)
@@ -1955,12 +1957,10 @@ while True:
                             h_crop -=1
                             new_crop = 0
                             new_mask = 0
-                        #h_crop = int(h_crop * (pre_width/cwidth))
                         text(0,5,3,1,1,str(h_crop),14,7)
                     else:
                         h_crop -=1
                         h_crop = max(h_crop,1)
-                        #h_crop = int(h_crop * (pre_width/cwidth))
                         text(0,5,3,1,1,str(h_crop),14,7)
                     mask,change = MaskChange()
                     save_config = 1
@@ -1972,12 +1972,10 @@ while True:
                         v_crop = min(v_crop,180)
                         if a-h_crop < 1 or b-v_crop < 1 or a+h_crop > cwidth or b+v_crop > int(cwidth/(pre_width/pre_height)):
                             v_crop -=1
-                        #v_crop = int(v_crop * (pre_height/pre_height))
                         text(0,6,3,1,1,str(v_crop),14,7)
                     else:
                         v_crop -=1
                         v_crop = max(v_crop,1)
-                        #v_crop = int(v_crop * (pre_height/pre_height))
                         text(0,6,3,1,1,str(v_crop),14,7)
                     mask,change = MaskChange()
                     save_config = 1
@@ -2158,11 +2156,13 @@ while True:
                         v3_f_mode +=1
                         v3_f_mode = min(v3_f_mode,2)
                     if v3_f_mode == 0:
-                        picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [ (0,0,pre_width,pre_height) ]})
+                        picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
                     elif v3_f_mode == 1:
-                        picam2.set_controls({"AfMode": controls.AfModeEnum.Auto, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [ (0,0,pre_width,pre_height) ]})
+                        picam2.set_controls({"AfMode": controls.AfModeEnum.Auto, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
+                        picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
                     elif v3_f_mode == 2:
-                        picam2.set_controls( { "AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [ (0,0,pre_width,pre_height) ] } )
+                        picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
+                        picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
                     text(0,0,3,1,1,v3_f_modes[v3_f_mode],14,7)
                     if v3_f_mode == 0:
                         picam2.set_controls({"LensPosition": v3_focus})
@@ -2449,8 +2449,8 @@ while True:
                         text(0,6,3,1,1,str(ev),14,7)
                         text(0,7,5,0,1,"Metering",14,7)
                         text(0,7,3,1,1,str(meters[meter]),14,7)
-                        text(0,8,5,0,1,"Saturation",14,7)
-                        text(0,8,3,1,1,str(saturation),14,7)
+                        text(0,8,5,0,1,"Sharpness",14,7)
+                        text(0,8,3,1,1,str(sharpness),14,7)
                         if zoom == 0:
                             button(0,9,0)
                             text(0,9,2,0,1,"Zoom",14,7)
@@ -2479,8 +2479,8 @@ while True:
                         else:
                             text(0,5,0,1,1,str(red)[0:3],14,7)
                             text(0,6,0,1,1,str(blue)[0:3],14,7)
-                        text(0,7,5,0,1,"Sharpness",14,7)
-                        text(0,7,3,1,1,str(sharpness),14,7)
+                        text(0,7,5,0,1,"Saturation",14,7)
+                        text(0,7,3,1,1,str(saturation),14,7)
                         text(0,3,2,0,1,"V Pre-Frames",14,7)
                         text(0,3,3,1,1,str(pre_frames),14,7)
                         text(0,8,5,0,1,"Denoise",14,7)
@@ -2496,7 +2496,6 @@ while True:
                         for d in range(0,10):
                             button(0,d,0)
                         show = 1
-                        trig = 1
                         old_cap = Capture
                         Jpegs = glob.glob(h_user + '/Videos/2*.jpg')
                         frames = len(Jpegs)
@@ -2556,11 +2555,6 @@ while True:
                         text(0,7,3,1,1,str(m_alpha),14,7)
                         text(0,8,3,0,1,"CLEAR Mask",14,7)
                         text(0,8,3,1,1," 0       1  ",14,7)
-                        text(0,9,1,0,1,"Shutdown Hour",14,7)
-                        if synced == 1:
-                            text(0,9,3,1,1,str(sd_hour) + ":00",14,7)
-                        else:
-                            text(0,9,0,1,1,str(sd_hour) + ":00",14,7)
                         if scientif == 1 and Pi_Cam == 4:
                             text(0,9,5,0,1,"Scientific",14,7)
                             text(0,9,3,1,1,str(scientific),14,7)
@@ -2631,6 +2625,11 @@ while True:
                                 text(0,8,3,1,1,"Short",14,7)
                             else:
                                 text(0,8,3,1,1,"Long",14,7)
+                        text(0,9,1,0,1,"Shutdown Hour",14,7)
+                        if synced == 1:
+                            text(0,9,3,1,1,str(sd_hour) + ":00",14,7)
+                        else:
+                            text(0,9,0,1,1,str(sd_hour) + ":00",14,7)
                         USB_Files  = []
                         USB_Files  = (os.listdir(m_user))
                         if len(USB_Files) > 0:
@@ -2642,7 +2641,6 @@ while True:
                     if g == 10 and menu != -1:
                         sframe = -1
                         eframe = -1
-                        trig = 1
                         if os.path.exists('mylist.txt'):
                             os.remove('mylist.txt')
                         txtvids = []
