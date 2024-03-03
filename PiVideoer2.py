@@ -16,12 +16,12 @@ from gpiozero import CPUTemperature
 from gpiozero import PWMLED
 import sys
 import random
-from picamera2 import Picamera2, Preview
+from picamera2 import Picamera2, Preview, MappedArray
 from picamera2.encoders import H264Encoder
 from picamera2.outputs import CircularOutput
 from libcamera import controls
 
-version = "0.01"
+version = "0.03"
 
 # set screen size
 scr_width  = 800
@@ -50,8 +50,8 @@ fan_ctrl = 1  # 0 for OFF.
    
 
 # set default config parameters
-v_crop        = 20      # size of vertical detection window *
-h_crop        = 20      # size of horizontal detection window *
+v_crop        = 120     # size of vertical detection window *
+h_crop        = 120     # size of horizontal detection window *
 threshold     = 20      # minm change in pixel luminance *
 threshold2    = 255     # maxm change in pixel luminance *
 detection     = 10      # % of pixels detected to trigger, in % *
@@ -67,7 +67,7 @@ Capture       = 1       # 0 = off, 1 = ON *
 preview       = 0       # show detected changed pixels *
 noframe       = 0       # set to 1 for no window frame
 awb           = 0       # auto white balance *
-red           = 3.5     # red balance *
+red           = 1.5     # red balance *
 blue          = 1.5     # blue balance *
 meter         = 0       # metering *
 ev            = 0       # eV *
@@ -89,10 +89,10 @@ sd_hour       = 0       # Shutdown Hour, 1 - 23, 0 will NOT SHUTDOWN *
 vformat       = 0       # SEE VWIDTHS/VHEIGHTS *
 col_filter    = 3       # 3 = FULL, SEE COL_FILTERS *
 nr            = 0       # Noise reduction *
-pre_frames    = fps * 2 # 2 x fps = 2 seconds *
+pre_frames    = 2       # seconds *
 scientific    = 0       # scientific for HQ camera * 
 v3_f_mode     = 1       # v3 camera focus mode *
-v3_focus      = 0       # v3 camera manual focus default *
+v3_focus      = 0       # v3 camera manual focus default , 0 = infinity*
 dspeed        = 100     # detection speed 1-100, 1 = slowest *
 anno          = 1       # annotate MP4s with date and time , 1 = yes, 0 = no *
 SD_F_Act      = 0       # Action on SD FULL, 0 = STOP, 1 = DELETE OLDEST VIDEO, 2 = COPY TO USB (if fitted) *
@@ -140,6 +140,14 @@ max_16mp    = 200
 max_64mp    = 435
 max_gs      = 15
 
+# apply timestamp to videos
+def apply_timestamp(request):
+  global anno
+  if anno == 1:
+      timestamp = time.strftime("%Y-%m-%d %X")
+      with MappedArray(request, "main") as m:
+          cv2.putText(m.array, timestamp, origin, font, scale, colour, thickness)
+      
 # setup directories
 Home_Files  = []
 Home_Files.append(os.getlogin())
@@ -346,6 +354,12 @@ Camera_Version()
 
 print(Pi_Cam,cam1,cam2)
 
+colour = (255, 255, 255)
+origin = (int(vid_width/3), int(vid_height - 50))
+font = cv2.FONT_HERSHEY_SIMPLEX
+scale = 1
+thickness = 2
+
 #set variables
 bh = int(scr_height/12)
 font_size = int(min(bh, bw)/3)
@@ -420,7 +434,8 @@ video_config = picam2.create_video_configuration(main={"size": (vid_width, vid_h
                                                  display="lores")
 picam2.configure(video_config)
 encoder = H264Encoder(4000000, repeat=True)
-encoder.output = CircularOutput(buffersize = pre_frames)
+encoder.output = CircularOutput(buffersize = pre_frames * fps)
+picam2.pre_callback = apply_timestamp
 picam2.start()
 picam2.start_encoder(encoder)
 encoding = False
@@ -1007,19 +1022,21 @@ while True:
                     encoder.output.stop()
                     encoding = False
                     # convert to mp4
-                    cmd = 'ffmpeg -framerate ' + str(fps) + ' -i ' + "/run/shm/" + str(timestamp) + '.h264 -c copy ' + "/run/shm/" + str(timestamp) + '.mp4'
+                    cmd = 'ffmpeg -framerate ' + str(mp4_fps) + ' -i ' + "/run/shm/" + str(timestamp) + '.h264 -c copy ' + "/run/shm/" + str(timestamp) + '.mp4'
                     os.system(cmd)
-                    print("Saved: ",vid_dir + str(timestamp) + '.mp4')
+                    print(cmd)
                     os.remove("/run/shm/" + str(timestamp) + '.h264')
                     if ES == 2 and use_gpio == 1:
                         led_s_trig.off()
                         led_s_focus.off()
+                    Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+                    frames = len(Videos)
                     Rideos = glob.glob('/run/shm/2???????????.mp4')
                     Rideos.sort()
                     ram_frames = len(Rideos)
-                    Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+                    for x in range(0,len(Rideos)):
+                         Videos.append(Rideos[x])
                     Videos.sort()
-                    frames = len(Videos)
                     vf = str(ram_frames) + " - " + str(frames)
                     if menu == -1:
                         text(0,0,3,1,1,vf,14,7)
@@ -1030,6 +1047,11 @@ while True:
                     free = (os.statvfs('/'))
                     SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
                     ss = str(int(freeram)) + " - " + str(int(SD_storage))
+                    Jpegs = glob.glob(h_user + "/" + '/Videos/2*.jpg')
+                    Rpegs = glob.glob('/run/shm/2*.jpg')
+                    for x in range(0,len(Rpegs)):
+                         Jpegs.append(Rpegs[x])
+                    Jpegs.sort()
                     # if RAM space < RAM Limit
                     if ram_frames > 0 and freeram < ram_limit:
                         if trace == 1:
@@ -1638,18 +1660,24 @@ while True:
                     elif meter == 2:
                         picam2.set_controls({"AeMeteringMode": controls.AeMeteringModeEnum.Matrix})
                     text(0,7,3,1,1,str(meters[meter]),14,7)
-                     
                     save_config = 1
 
                 elif g == 3 and menu == 2:
                     # PRE FRAMES
-                    if (h == 1 and event.button == 1) or event.button == 4:
+                    if h == 1 and event.button == 1:
                         pre_frames +=1
-                        pre_frames = min(pre_frames,1000)
+                        pre_frames = min(pre_frames,50)
                     else:
                         pre_frames -=1
-                        pre_frames = max(pre_frames,0)
-                    text(0,3,3,1,1,str(pre_frames),14,7)
+                        pre_frames = max(pre_frames,1)
+                    text(0,3,0,1,1,str(pre_frames) + " Secs",14,7)
+                    picam2.stop_encoder()
+                    picam2.stop()
+                    encoder.output = CircularOutput(buffersize = pre_frames * fps)
+                    picam2.start()
+                    picam2.start_encoder(encoder)
+                    time.sleep(pre_frames)
+                    text(0,3,3,1,1,str(pre_frames) + " Secs",14,7)
                     save_config = 1
                     
                 elif g == 7 and menu == 2:
@@ -1683,11 +1711,19 @@ while True:
                         fps -=1
                         fps = max(fps,5)
                     picam2.set_controls({"FrameRate": fps})
-                    pre_frames = 2 * fps
-                    text(0,3,3,1,1,str(pre_frames),14,7)
                     text(0,2,3,1,1,str(fps),14,7)
                     text(0,1,3,1,1,str(v_length/1000) + "  (" + str(int(fps*(v_length/1000))) +")",14,7)
-                    mp4_fps = fps
+                    save_config = 1
+
+                elif g == 0 and menu == 2:
+                    # MP4 FPS
+                    if (h == 1 and event.button == 1) or event.button == 4:
+                        mp4_fps +=1
+                        mp4_fps = min(mp4_fps,100)
+                    else:
+                        mp4_fps -=1
+                        mp4_fps = max(mp4_fps,5)
+                    text(0,0,3,1,1,str(mp4_fps),14,7)
                     save_config = 1
 
                 elif g == 4 and menu == 2:
@@ -1819,6 +1855,19 @@ while True:
                 elif g == 6 and menu == 3 and show == 1 and frames + ram_frames > 0 and (frames > 0 or ram_frames > 0) and event.button == 3:
                     # DELETE A VIDEO
                     try:
+                      Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+                      frames = len(Videos)
+                      Rideos = glob.glob('/run/shm/2???????????.mp4')
+                      Rideos.sort()
+                      ram_frames = len(Rideos)
+                      for x in range(0,len(Rideos)):
+                         Videos.append(Rideos[x])
+                      Videos.sort()
+                      Jpegs = glob.glob(h_user + "/" + '/Videos/2*.jpg')
+                      Rpegs = glob.glob('/run/shm/2*.jpg')
+                      for x in range(0,len(Rpegs)):
+                         Jpegs.append(Rpegs[x])
+                      Jpegs.sort()
                       fontObj = pygame.font.Font(None, 70)
                       msgSurfaceObj = fontObj.render("DELETING....", False, (255,0,0))
                       msgRectobj = msgSurfaceObj.get_rect()
@@ -1830,7 +1879,7 @@ while True:
                     except:
                         pass
                     Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
-                    frames     = len(Videos)
+                    frames = len(Videos)
                     Rideos = glob.glob('/run/shm/2???????????.mp4')
                     Rideos.sort()
                     for x in range(0,len(Rideos)):
@@ -2218,6 +2267,19 @@ while True:
                     os.system("v4l2-ctl -d /dev/v4l-subdev" + str(foc_sub5) + " -c focus_absolute=" + str(focus))
                     text(0,1,3,1,1,str(focus),14,7)
 
+                elif g == 6 and menu == 7:
+                    # ANNOTATE MP4
+                    if h == 0 and event.button == 1:
+                        anno -= 1
+                        anno = max(anno,0)
+                    else:
+                        anno += 1
+                        anno = min(anno,1)
+                    if anno == 1:
+                        text(0,6,3,1,1,"Yes",14,7)
+                    else:
+                        text(0,6,3,1,1,"No",14,7)
+
                 elif g == 7 and menu == 7:
                     # MASK ALPHA
                     if (h == 0 and event.button == 1) or event.button == 5:
@@ -2467,6 +2529,8 @@ while True:
                         menu = 2
                         for d in range(0,10):
                             button(0,d,0)
+                        text(0,0,5,0,1,"MP4 fps",14,7)
+                        text(0,0,3,1,1,str(mp4_fps),14,7)
                         text(0,4,5,0,1,"AWB",14,7)
                         text(0,4,3,1,1,str(awbs[awb]),14,7)
                         text(0,2,5,0,1,"fps",14,7)
@@ -2482,7 +2546,7 @@ while True:
                         text(0,7,5,0,1,"Saturation",14,7)
                         text(0,7,3,1,1,str(saturation),14,7)
                         text(0,3,2,0,1,"V Pre-Frames",14,7)
-                        text(0,3,3,1,1,str(pre_frames),14,7)
+                        text(0,3,3,1,1,str(pre_frames) + " Secs",14,7)
                         text(0,8,5,0,1,"Denoise",14,7)
                         text(0,8,3,1,1,str(denoises[denoise]),14,7)
                         text(0,9,2,0,1,"Interval S",14,7)
@@ -2551,6 +2615,11 @@ while True:
                         else:
                             button(0,3,1)
                             text(0,3,1,0,1,"Zoom",14,0)
+                        text(0,6,2,0,1,"Annotate MP4",14,7)
+                        if anno == 0:
+                            text(0,6,3,1,1,"No",14,7)
+                        else:
+                            text(0,6,3,1,1,"Yes",14,7)
                         text(0,7,2,0,1,"MASK Alpha",14,7)
                         text(0,7,3,1,1,str(m_alpha),14,7)
                         text(0,8,3,0,1,"CLEAR Mask",14,7)
