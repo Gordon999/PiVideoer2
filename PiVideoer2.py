@@ -21,7 +21,7 @@ from picamera2.encoders import H264Encoder
 from picamera2.outputs import CircularOutput
 from libcamera import controls
 
-version = "0.03"
+version = "0.04"
 
 # set screen size
 scr_width  = 800
@@ -146,6 +146,11 @@ def apply_timestamp(request):
   if anno == 1:
       timestamp = time.strftime("%Y-%m-%d %X")
       with MappedArray(request, "main") as m:
+          lst = list(origin)
+          lst[0] += 370
+          lst[1] -= 20
+          end_point = tuple(lst)
+          cv2.rectangle(m.array, origin, end_point, (0,0,0), -1) 
           cv2.putText(m.array, timestamp, origin, font, scale, colour, thickness)
       
 # setup directories
@@ -155,6 +160,8 @@ vid_dir = "/home/" + Home_Files[0]+ "/Videos/"
 
 cameras       = ['Unknown','Pi v1','Pi v2','Pi v3','Pi HQ','Arducam 16MP','Arducam 64MP','Pi GS']
 camids        = ['','ov5647','imx219','imx708','imx477','imx519','arduc','imx296']
+swidths       = [0,2592,3280,4608,4056,4656,9152,1456]
+sheights      = [0,1944,2464,2592,3040,3496,6944,1088]
 max_gains     = [64,     255,      40,      64,      88,      64,      64,      64]
 max_shutters  = [0,   max_v1, max_v2,   max_v3,  max_hq,max_16mp,max_64mp,  max_gs]
 mags          = [64,     255,      40,      64,      88,      64,      64,      64]
@@ -262,7 +269,7 @@ bw = int(scr_width/8)
 cwidth  = scr_width - bw
 cheight = scr_height
 old_vf  = vformat
-focus   = 0
+focus = 0
 
 # timelapse interval timer (set Low Threshold = 0 and set interval timer)
 if threshold == 0:
@@ -271,7 +278,7 @@ if threshold == 0:
         v_length = (interval - 1) * 1000
 
 def Camera_Version():
-  global vid_width,vid_height,old_vf,bw,Pi_Cam,cam1,cam2,camera,camids,max_camera,same_cams,max_gain,max_vf,max_vfs,a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,vwidths,vheights,pre_width,scr_width,scr_height
+  global swidth,sheight,vid_width,vid_height,old_vf,bw,Pi_Cam,cam1,cam2,camera,camids,max_camera,same_cams,max_gain,max_vf,max_vfs,a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,vwidths,vheights,pre_width,scr_width,scr_height
   if os.path.exists('libcams.txt'):
    os.rename('libcams.txt', 'oldlibcams.txt')
   os.system("rpicam-vid --list-cameras >> libcams.txt")
@@ -321,7 +328,7 @@ def Camera_Version():
         max_camera = 1
         
   if max_camera == 1 and cam1 == cam2:
-    same_cams = 1
+      same_cams = 1
   Pi_Cam = -1
   for x in range(0,len(camids)):
      if camera == 0:
@@ -330,13 +337,13 @@ def Camera_Version():
      elif camera == 1:
         if cam2 == camids[x]:
             Pi_Cam = x
-
   max_gain = max_gains[Pi_Cam]
-
   if a > pre_width - v_crop:
       a = int(pre_width/2)
   if b > pre_height - h_crop:
       b = int(pre_height/2)
+  swidth = swidths[Pi_Cam]
+  sheight = sheights[Pi_Cam]
   # set video size
   if Pi_Cam == 7:
       vid_width  = 1456
@@ -344,7 +351,6 @@ def Camera_Version():
   else:
       vid_width  = 1920
       vid_height = 1080
-
   if Pi_Cam == -1:
         print("No Camera Found")
         pygame.display.quit()
@@ -354,10 +360,11 @@ Camera_Version()
 
 print(Pi_Cam,cam1,cam2)
 
+# annotation parameters
 colour = (255, 255, 255)
 origin = (int(vid_width/3), int(vid_height - 50))
-font = cv2.FONT_HERSHEY_SIMPLEX
-scale = 1
+font   = cv2.FONT_HERSHEY_SIMPLEX
+scale  = 1
 thickness = 2
 
 #set variables
@@ -406,7 +413,7 @@ mask,change = MaskChange()
 if os.path.exists('mylist.txt'):
     os.remove('mylist.txt')
 
-# determine /dev/v4l-subdevX for Pi v3 and Arducam 16/64MP cameras
+# determine /dev/v4l-subdevX for Pi v3 and Arducam 16/64MP (Hawkeye) cameras
 foc_sub3 = -1
 foc_sub5 = -1
 for x in range(0,10):
@@ -442,6 +449,33 @@ encoding = False
 ltime = 0
 
 # setup camera parameters
+if mode == 0:
+    picam2.set_controls({"AeEnable": False,"ExposureTime": speed})
+else:
+    if mode == 1:
+         picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Normal})
+    elif mode == 2:
+         picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Short})
+    elif mode == 3:
+         picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Long})
+time.sleep(1)
+if awb == 0:
+    picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Auto})
+elif awb == 1:
+    picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Tungsten})
+elif awb == 2:
+    picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Fluorescent})
+elif awb == 3:
+    picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Indoor})
+elif awb == 4:
+    picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Daylight})
+elif awb == 5:
+    picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Cloudy})
+elif awb == 6:
+    picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Custom})
+    cg = (red,blue)
+    picam2.set_controls({"AwbEnable": False,"ColourGains": cg})
+time.sleep(1)
 if Pi_Cam == 3:
     if v3_f_mode == 0:
         picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
@@ -451,38 +485,6 @@ if Pi_Cam == 3:
     elif v3_f_mode == 2:
         picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
         picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
-picam2.set_controls({"FrameRate": fps})
-if awb < 6:
-    picam2.set_controls({"AwbEnable": True})
-else:
-    picam2.set_controls({"AwbEnable": False})
-if awb == 0:
-    picam2.set_controls({"AwbMode": controls.AwbModeEnum.Auto})
-elif awb == 1:
-    picam2.set_controls({"AwbMode": controls.AwbModeEnum.Tungsten})
-elif awb == 2:
-    picam2.set_controls({"AwbMode": controls.AwbModeEnum.Fluorescent})
-elif awb == 3:
-    picam2.set_controls({"AwbMode": controls.AwbModeEnum.Indoor})
-elif awb == 4:
-    picam2.set_controls({"AwbMode": controls.AwbModeEnum.Daylight})
-elif awb == 5:
-    picam2.set_controls({"AwbMode": controls.AwbModeEnum.Cloudy})
-elif awb == 6:
-    picam2.set_controls({"AwbMode": controls.AwbModeEnum.Custom})
-    cg = (red,blue)
-    picam2.set_controls({"ColourGains": cg})
-if mode == 0:
-    picam2.set_controls({"AeEnable": False})
-    picam2.set_controls({"ExposureTime": speed})
-else:
-    picam2.set_controls({"AeEnable": True})
-    if mode == 1:
-         picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Normal})
-    elif mode == 2:
-         picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Short})
-    elif mode == 3:
-         picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Long})
 picam2.set_controls({"Brightness": brightness/10})
 picam2.set_controls({"Contrast": contrast/10})
 picam2.set_controls({"ExposureValue": ev/10})
@@ -503,6 +505,7 @@ elif denoise == 1:
     picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Fast})
 elif denoise == 2:
     picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
+picam2.set_controls({"FrameRate": fps})
 
 # check for usb_stick
 USB_Files  = []
@@ -700,6 +703,9 @@ cpu_temp = str(CPUTemperature()).split("=")
 temp = float(str(cpu_temp[1])[:-1])
 
 old_capture = Capture
+
+if awb == 0:
+    picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Auto})
 
 while True:
     time.sleep(1/dspeed)
@@ -1024,7 +1030,6 @@ while True:
                     # convert to mp4
                     cmd = 'ffmpeg -framerate ' + str(mp4_fps) + ' -i ' + "/run/shm/" + str(timestamp) + '.h264 -c copy ' + "/run/shm/" + str(timestamp) + '.mp4'
                     os.system(cmd)
-                    print(cmd)
                     os.remove("/run/shm/" + str(timestamp) + '.h264')
                     if ES == 2 and use_gpio == 1:
                         led_s_trig.off()
@@ -1310,19 +1315,19 @@ while True:
             # set mask
             if mousex < pre_width and zoom == 0 and event.button == 3 :
                 if mousex > a - h_crop and mousex < a + h_crop and mousey < b + v_crop and mousey > b - v_crop:
-                    mx = int((mousex - (a - h_crop)) *(pre_width/cwidth))
-                    my = int((mousey - (b - v_crop)) *(pre_height/pre_height))
+                    mx = int(mousex - (a - h_crop)) 
+                    my = int(mousey - (b - v_crop))
                     su = int(h_crop/5)
                     sl = 0-su
                     if mask[mx][my] == 0:
                         for aa in range(sl,su):
                             for bb in range(sl,su):
-                                if mx + bb > 0 and my + aa > 0 and mx + bb < h_crop * ((2 * pre_width/cwidth) -0.1) and my + aa < v_crop * ((2 * pre_height/pre_height) - 0.1):
+                                if mx + bb > 0 and my + aa > 0 and mx + bb < h_crop * 2  and my + aa < v_crop * 2:
                                     mask[mx + bb][my + aa] = 1
                     else:
                         for aa in range(sl,su):
                             for bb in range(sl,su):
-                                if mx + bb > 0 and my + aa > 0 and mx + bb < h_crop * ((2 * pre_width/cwidth) -0.1) and my + aa < v_crop * ((2 * pre_height/pre_height) - 0.1):
+                                if mx + bb > 0 and my + aa > 0 and mx + bb < h_crop * 2  and my + aa < v_crop * 2:
                                     mask[mx + bb][my + aa] = 0
                     nmask = pygame.surfarray.make_surface(mask)
                     nmask = pygame.transform.scale(nmask, (200,200))
@@ -1342,11 +1347,11 @@ while True:
                    a = h_crop
                 if b - v_crop < 0:
                    b = v_crop
-                fxx = int((a - h_crop) * (vid_width/pre_width))
-                fxy = int((b + v_crop) * (vid_height/pre_height))
-                fxz = int((fxx + h_crop) * (vid_width/pre_width))
-                fxa = int((fxy + v_crop) * (vid_height/pre_height))
-                picam2.set_controls( { "AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
+                fxx = int((a - h_crop) * (swidth/pre_width))
+                fxy = int((b - v_crop) * (sheight/pre_height))
+                fxz = int((h_crop * 2) * (swidth/pre_width))
+                fxa = int((v_crop * 2) * (sheight/pre_height))
+                picam2.set_controls({"AfMode" : controls.AfModeEnum.Continuous,"AfMetering" : controls.AfMeteringEnum.Windows,"AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
                 text(0,0,3,1,1,"Spot",14,7)
                 oldimg = []
                 save_config = 1
@@ -1585,7 +1590,10 @@ while True:
                         speed -=1000
                         if speed > 50000:
                             speed -=9000
-                        speed = max(speed,1)
+                        speed = max(speed,1000)
+                    fps = int(1/(speed/1000000))
+                    fps = max(fps,1)
+                    picam2.set_controls({"FrameRate": fps})
                     picam2.set_controls({"ExposureTime": speed})
                     if mode != 0:
                         text(0,2,0,1,1,str(int(speed/1000)),14,7)
@@ -1706,7 +1714,7 @@ while True:
                     # FPS
                     if (h == 1 and event.button == 1) or event.button == 4:
                         fps +=1
-                        fps = min(fps,80)
+                        fps = min(fps,120)
                     else:
                         fps -=1
                         fps = max(fps,5)
@@ -1735,28 +1743,21 @@ while True:
                         awb -=1
                         awb = max(awb,0)
                     if awb == 0:
-                        picam2.set_controls({"AwbEnable": True})
-                        picam2.set_controls({"AwbMode": controls.AwbModeEnum.Auto})
+                        picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Auto})
                     elif awb == 1:
-                        picam2.set_controls({"AwbEnable": True})
-                        picam2.set_controls({"AwbMode": controls.AwbModeEnum.Tungsten})
+                        picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Tungsten})
                     elif awb == 2:
-                        picam2.set_controls({"AwbEnable": True})
-                        picam2.set_controls({"AwbMode": controls.AwbModeEnum.Fluorescent})
+                        picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Fluorescent})
                     elif awb == 3:
-                        picam2.set_controls({"AwbEnable": True})
-                        picam2.set_controls({"AwbMode": controls.AwbModeEnum.Indoor})
+                        picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Indoor})
                     elif awb == 4:
-                        picam2.set_controls({"AwbEnable": True})
-                        picam2.set_controls({"AwbMode": controls.AwbModeEnum.Daylight})
+                        picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Daylight})
                     elif awb == 5:
-                        picam2.set_controls({"AwbEnable": True})
-                        picam2.set_controls({"AwbMode": controls.AwbModeEnum.Cloudy})
+                        picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Cloudy})
                     elif awb == 6:
-                        picam2.set_controls({"AwbEnable": False})
-                        picam2.set_controls({"AwbMode": controls.AwbModeEnum.Custom})
+                        picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Custom})
                         cg = (red,blue)
-                        picam2.set_controls({"ColourGains": cg})
+                        picam2.set_controls({"AwbEnable": False,"ColourGains": cg})
                     text(0,4,3,1,1,str(awbs[awb]),14,7)
                     if awb == 6:
                         text(0,5,3,1,1,str(red)[0:3],14,7)
@@ -2090,8 +2091,8 @@ while True:
                             mp = 0
                         else:
                             mp = 1
-                        for bb in range(0,int(h_crop * ((2 * pre_width/cwidth) -0.1))):
-                            for aa in range(0,int(v_crop * ((2 * pre_height/pre_height)-0.1))):
+                        for bb in range(0,int(h_crop * 2)):
+                            for aa in range(0,int(v_crop * 2 )):
                                 mask[bb][aa] = mp
                         nmask = pygame.surfarray.make_surface(mask)
                         nmask = pygame.transform.scale(nmask, (200,200))
@@ -2537,7 +2538,7 @@ while True:
                         text(0,2,3,1,1,str(fps),14,7)
                         text(0,5,5,0,1,"Red",14,7)
                         text(0,6,5,0,1,"Blue",14,7)
-                        if awb == 0:
+                        if awb == 6:
                             text(0,5,3,1,1,str(red)[0:3],14,7)
                             text(0,6,3,1,1,str(blue)[0:3],14,7)
                         else:
