@@ -21,7 +21,7 @@ from picamera2.encoders import H264Encoder
 from picamera2.outputs import CircularOutput
 from libcamera import controls
 
-version = "0.04"
+version = "0.05"
 
 # set screen size
 scr_width  = 800
@@ -129,6 +129,7 @@ fstep         = 20
 old_foc       = 0
 min_foc       = 15
 rep           = 0
+fps2          = fps
 
 # Camera max exposure (Note v1 is currently 1 second not the raspistill 6 seconds)
 # whatever value set it MUST be in shutters list !!
@@ -1593,6 +1594,7 @@ while True:
                         speed = max(speed,1000)
                     fps = int(1/(speed/1000000))
                     fps = max(fps,1)
+                    fps = min(fps,fps2)
                     picam2.set_controls({"FrameRate": fps})
                     picam2.set_controls({"ExposureTime": speed})
                     if mode != 0:
@@ -1721,6 +1723,7 @@ while True:
                     picam2.set_controls({"FrameRate": fps})
                     text(0,2,3,1,1,str(fps),14,7)
                     text(0,1,3,1,1,str(v_length/1000) + "  (" + str(int(fps*(v_length/1000))) +")",14,7)
+                    fps2 = fps
                     save_config = 1
 
                 elif g == 0 and menu == 2:
