@@ -21,7 +21,7 @@ from picamera2.encoders import H264Encoder
 from picamera2.outputs import CircularOutput
 from libcamera import controls
 
-version = "0.05"
+version = "0.09"
 
 # set screen size
 scr_width  = 800
@@ -159,13 +159,13 @@ Home_Files  = []
 Home_Files.append(os.getlogin())
 vid_dir = "/home/" + Home_Files[0]+ "/Videos/"
 
-cameras       = ['Unknown','Pi v1','Pi v2','Pi v3','Pi HQ','Arducam 16MP','Arducam 64MP','Pi GS']
-camids        = ['','ov5647','imx219','imx708','imx477','imx519','arduc','imx296']
-swidths       = [0,2592,3280,4608,4056,4656,9152,1456]
-sheights      = [0,1944,2464,2592,3040,3496,6944,1088]
-max_gains     = [64,     255,      40,      64,      88,      64,      64,      64]
-max_shutters  = [0,   max_v1, max_v2,   max_v3,  max_hq,max_16mp,max_64mp,  max_gs]
-mags          = [64,     255,      40,      64,      88,      64,      64,      64]
+cameras       = ['Unknown','Pi v1','Pi v2','Pi v3','Pi HQ','Arducam 16MP','Arducam 64MP','Pi GS','Arducam Owlsight']
+camids        = ['','ov5647','imx219','imx708','imx477','imx519','arduc','imx296','ov64a4']
+swidths       = [0,2592,3280,4608,4056,4656,9152,1456,9248]
+sheights      = [0,1944,2464,2592,3040,3496,6944,1088,6944]
+max_gains     = [64,     255,      40,      64,      88,      64,      64,      64,      64]
+max_shutters  = [0,   max_v1, max_v2,   max_v3,  max_hq,max_16mp,max_64mp,  max_gs,max_64mp]
+mags          = [64,     255,      40,      64,      88,      64,      64,      64,      64]
 modes         = ['manual','normal','short','long']
 meters        = ['CentreWeighted','Spot','Matrix']
 awbs          = ['auto','tungsten','fluorescent','indoor','daylight','cloudy','custom']
@@ -279,7 +279,7 @@ if threshold == 0:
         v_length = (interval - 1) * 1000
 
 def Camera_Version():
-  global swidth,sheight,vid_width,vid_height,old_vf,bw,Pi_Cam,cam1,cam2,camera,camids,max_camera,same_cams,max_gain,max_vf,max_vfs,a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,vwidths,vheights,pre_width,scr_width,scr_height
+  global lores_width,lores_height,swidth,sheight,vid_width,vid_height,old_vf,bw,Pi_Cam,cam1,cam2,camera,camids,max_camera,same_cams,max_gain,max_vf,max_vfs,a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,vwidths,vheights,pre_width,scr_width,scr_height
   if os.path.exists('libcams.txt'):
    os.rename('libcams.txt', 'oldlibcams.txt')
   os.system("rpicam-vid --list-cameras >> libcams.txt")
@@ -349,9 +349,15 @@ def Camera_Version():
   if Pi_Cam == 7:
       vid_width  = 1456
       vid_height = 1088
+      # set lores size
+      lores_width  = 1456
+      lores_height = 1088
   else:
       vid_width  = 1920
       vid_height = 1080
+      # set lores size
+      lores_width  = 1280
+      lores_height = 960
   if Pi_Cam == -1:
         print("No Camera Found")
         pygame.display.quit()
@@ -435,7 +441,7 @@ for x in range(0,10):
             foc_sub3 = x
 
 # start circular buffer
-lsize = (pre_width, pre_height)
+lsize = (lores_width,lores_height)
 picam2 = Picamera2()
 video_config = picam2.create_video_configuration(main={"size": (vid_width, vid_height), "format": "RGB888"},
                                                  lores={"size": lsize, "format": "YUV420"},
@@ -477,7 +483,7 @@ elif awb == 6:
     cg = (red,blue)
     picam2.set_controls({"AwbEnable": False,"ColourGains": cg})
 time.sleep(1)
-if Pi_Cam == 3:
+if (Pi_Cam == 3 or Pi_Cam == 8):
     if v3_f_mode == 0:
         picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
     elif v3_f_mode == 1:
@@ -821,7 +827,8 @@ while True:
     cur = picam2.capture_array("lores")
     img = cv2.cvtColor(cur,cv2.COLOR_YUV420p2BGR)
     image = pygame.surfarray.make_surface(img)
-    image = pygame.transform.rotate(image, int(90))
+    image = pygame.transform.scale(image,(pre_height,pre_width))
+    image = pygame.transform.rotate(image,int(90))
     image = pygame.transform.flip(image,0,1)
 
     # IF NOT IN SHOW MODE
@@ -992,7 +999,7 @@ while True:
                         encoder.output.start()
                         encoding = True
                         print("New Motion", timestamp)
-                        image3 = image
+                        image3 = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
                     ltime = time.time()
                     detect = 1
                     if ES > 0 and use_gpio == 1: # trigger external camera
@@ -1046,7 +1053,7 @@ while True:
                     vf = str(ram_frames) + " - " + str(frames)
                     if menu == -1:
                         text(0,0,3,1,1,vf,14,7)
-                    pygame.image.save(image3,"/run/shm/" + str(timestamp) + ".jpg")
+                    cv2.imwrite("/run/shm/" + str(timestamp) + ".jpg",image3)
                     last = time.monotonic()    
                     st = os.statvfs("/run/shm/")
                     freeram = (st.f_bavail * st.f_frsize)/1100000
@@ -1190,11 +1197,11 @@ while True:
         if gcount > 0:
           gcount = 0
           if zoom == 0:
-              cropped = pygame.transform.scale(image, (pre_width,pre_height))
+              cropped = pygame.transform.scale(image,(pre_width,pre_height))
           else:
               cropped = pygame.surfarray.make_surface(crop)
               cropped = pygame.transform.scale(cropped, (pre_width,pre_height))
-          windowSurfaceObj.blit(cropped, (0, 0))
+          windowSurfaceObj.blit(cropped,(0, 0))
           # show colour filtering
           if col_filter < 3 and (preview == 1 or col_timer > 0):
             imageqw = pygame.image.load('/run/shm/qw.jpg')
@@ -1224,7 +1231,7 @@ while True:
               nmask.set_colorkey((0,0,50))
               nmask.set_alpha(m_alpha)
               windowSurfaceObj.blit(nmask, (a - h_crop,b - v_crop))
-          if Pi_Cam == 3 and fxz != 1 and zoom == 0 and menu == 7:
+          if (Pi_Cam == 3 or Pi_Cam == 8) and fxz != 1 and zoom == 0 and menu == 7:
             pygame.draw.rect(windowSurfaceObj,(200,0,0),Rect(int(fxx*cwidth),int(fxy*cheight*.75),int(fxz*cwidth),int(fxz*cheight)),1)
           pygame.display.update(0,0,scr_width-bw,scr_height)
 
@@ -1297,7 +1304,7 @@ while True:
             timer = time.monotonic()
             mousex, mousey = event.pos
             # set crop position
-            if mousex < pre_width and zoom == 0 and ((menu != 7 or (Pi_Cam == 3 and v3_f_mode == 1)) or (Pi_Cam == 5 or Pi_Cam == 6)) and event.button != 3:
+            if mousex < pre_width and zoom == 0 and ((menu != 7 or ((Pi_Cam == 3 or Pi_Cam == 8) and v3_f_mode == 1)) or (Pi_Cam == 5 or Pi_Cam == 6)) and event.button != 3:
                 if (Pi_Cam == 5 or Pi_Cam == 6):
                     fcount = 0
                 a = mousex
@@ -1337,7 +1344,7 @@ while True:
                     pygame.image.save(nmask,h_user + '/CMask.bmp')
                  
             # set v3 camera autofocus position 
-            if mousex < pre_width and zoom == 0 and menu == 7 and Pi_Cam == 3 and v3_f_mode > 0 :
+            if mousex < pre_width and zoom == 0 and menu == 7 and (Pi_Cam == 3 or Pi_Cam == 8) and v3_f_mode > 0 and event.button != 3:
                 a = mousex
                 b = mousey
                 if a + h_crop > pre_width:
@@ -1564,10 +1571,12 @@ while True:
                         mode = min(mode,3)
                     else:
                         mode -=1
+                        mode = max(mode,0)
                     if mode == 0:
                         picam2.set_controls({"AeEnable": False})
                         picam2.set_controls({"ExposureTime": speed})
                         text(0,2,3,1,1,str(int(speed/1000)),14,7)
+                        picam2.set_controls({"AnalogueGain": gain})
                     else:
                         picam2.set_controls({"AeEnable": True})
                         text(0,2,0,1,1,str(int(speed/1000)),14,7)
@@ -1577,6 +1586,7 @@ while True:
                             picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Short})
                         if mode == 3:
                             picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Long})
+                        picam2.set_controls({"AnalogueGain": gain})
                     text(0,1,3,1,1,modes[mode],14,7)
                     save_config = 1
                     
@@ -1676,7 +1686,7 @@ while True:
                     # PRE FRAMES
                     if h == 1 and event.button == 1:
                         pre_frames +=1
-                        pre_frames = min(pre_frames,50)
+                        pre_frames = min(pre_frames,10)
                     else:
                         pre_frames -=1
                         pre_frames = max(pre_frames,1)
@@ -2200,7 +2210,7 @@ while True:
                     text(0,8,3,1,1,str(dspeed),14,7)
                     save_config = 1
 
-                elif g == 0 and menu == 7 and (Pi_Cam == 3 or Pi_Cam == 5):
+                elif g == 0 and menu == 7 and ((Pi_Cam == 3 or Pi_Cam == 8) or Pi_Cam == 5):
                     # v3 camera focus mode
                     if (h == 0 and event.button == 1) or event.button == 5:
                         v3_f_mode -=1
@@ -2220,7 +2230,7 @@ while True:
                     if v3_f_mode == 0:
                         picam2.set_controls({"LensPosition": v3_focus})
                         text(0,1,2,0,1,"Focus Manual",14,7)
-                        if v3_focus == 0 and Pi_Cam == 3:
+                        if v3_focus == 0 and (Pi_Cam == 3 or Pi_Cam == 8):
                             text(0,1,3,1,1,"inf",14,7)
                         elif (Pi_Cam == 5 or Pi_Cam == 6):
                             text(0,1,3,1,1,str(focus),14,7)
@@ -2237,7 +2247,7 @@ while True:
                         fcount = 0
                     save_config = 1
 
-                elif g == 1 and menu == 7 and v3_f_mode == 0 and Pi_Cam == 3:
+                elif g == 1 and menu == 7 and v3_f_mode == 0 and (Pi_Cam == 3 or Pi_Cam == 8):
                     # v3 camera focus manual
                     if gv < bh/3:
                         mp = 1 - hp
@@ -2631,11 +2641,11 @@ while True:
                         if scientif == 1 and Pi_Cam == 4:
                             text(0,9,5,0,1,"Scientific",14,7)
                             text(0,9,3,1,1,str(scientific),14,7)
-                        if Pi_Cam == 3 or Pi_Cam == 5:
+                        if (Pi_Cam == 3 or Pi_Cam == 8) or Pi_Cam == 5:
                             text(0,0,2,0,1,"Focus",14,7)
                             if v3_f_mode == 1:
                                 text(0,1,2,0,1,"Focus Manual",14,7)
-                                if v3_focus == 0 and Pi_Cam == 3:
+                                if v3_focus == 0 and (Pi_Cam == 3 or Pi_Cam == 8):
                                     text(0,1,3,1,1,"inf",14,7)
                                 elif (Pi_Cam == 5 or Pi_Cam == 6):
                                     text(0,1,3,1,1,str(focus),14,7)
