@@ -3,7 +3,7 @@
 A python script to capture Videos from Pi v1,2,3 , HQ or GS cameras , or Arducam OWLSIGHT 64MP AF camera, triggered by motion , external trigger or manually. 
 Uses Raspberry OS BULLSEYE or BOOKWORM (for BOOKWORM switch to X11 not Wayland) and Picamera2.
 
-It will capture videos at 25fps at 1920 x 1080, or on a GS camera 1465 x 1088.
+It will capture videos at 25fps at 1920 x 1080, or on a GS camera 1456 x 1088.
 
 lt also captures frames before the trigger frame, default is 2 seconds but user settable.
 
