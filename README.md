@@ -7,7 +7,7 @@ It will capture videos at 25fps at 1920 x 1080, or on a GS camera 1456 x 1088.
 
 lt also captures frames before the trigger frame, default is 2 seconds but user settable.
 
-Pi v3 or Arducam cameras can be auto / manually focussed. Pi v3 also can do spot focus.
+Pi v3 or Arducam OWLSIGHT camera can be auto / manually focussed. Pi v3 also can do spot focus.
 
 Makes individual mp4s, and can make a FULL MP4 of MP4s stored.
 
