@@ -19,6 +19,10 @@ Can control focus on a pi v3camera, auto, continuous,  manual or spot. For spot 
 
 mp4s captured in /home/《user》/Videos.
 
+Allows switching of IMX290-83 camera IR filters based on sunrise/sunset or set times.
+
+On a Pi5 allows switching of cameras based on sunrise/sunset or set times.
+
 ## Screenshot
 
 ![screenshot](screen003.jpg)
@@ -31,6 +35,7 @@ Install latest FULL RaspiOS based on Bullseye or Bookworm (tested with FULL 32bi
 if using BOOKWORM switch to X11. sudo raspi-config, choose advanced , choose 6A X11 option, reboot.
 
 sudo apt install python3-opencv
+sudo pip3 install ephem --break-system-packages (or use venv!!)
 
 Download PiVideoer2.py and copy to /home/《user》
 
