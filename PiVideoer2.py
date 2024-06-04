@@ -3666,7 +3666,6 @@ while True:
 
                     if g == 5:
                         # video settings
-                        #print(camera_sw,old_camera_sw)
                         menu = 3
                         menu_timer  = time.monotonic()
                         old_capture = Capture
@@ -3852,7 +3851,7 @@ while True:
                         old_camera = camera
                         camera = 1
                         old_camera_sw = camera_sw
-                        camera_sw = 4
+                        camera_sw = 3
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
@@ -3910,7 +3909,7 @@ while True:
                         #print(camera_sw,old_camera_sw)
                         old_camera_sw = camera_sw
                         #print(camera_sw,old_camera_sw)
-                        camera_sw = 4
+                        camera_sw = 3
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
