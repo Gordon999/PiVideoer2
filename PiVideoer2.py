@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-""" Copyright (c) 2024
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE."""
-
 import time
 import cv2
 import numpy as np
@@ -41,13 +24,18 @@ import threading
 from queue import Queue
 import ephem
 import datetime
+import pytz
+from timezonefinder import TimezoneFinder
 
+# Version
+version = "0.32"
+
+# Your Location
 somewhere = ephem.Observer()
 somewhere.lat = '51.49340' # set your location latitude
 somewhere.lon = '00.00980' # set your location longtitude
 somewhere.elevation = 100  # set your location height
-
-version = "0.31"
+UTC_offset = 1             # set your local time offset to UTC
 
 # set screen size
 scr_width  = 800
@@ -158,7 +146,7 @@ ir_of_hour    = 10      # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
 ir_on_mins    = 0       # Switch IR Filter ON mins, 0 - 59 *
 ir_of_mins    = 0       # Switch IR Filter OFF mins, 0 - 59 *
 m_alpha       = 130     # MASK ALPHA *
-sync_time     = 600     # time sync check time in seconds *
+sync_time     = 120     # time sync check time in seconds *
 camera        = 0       # camera in use *
 camera_sw     = 0       # camera switch mode *
 
@@ -388,11 +376,11 @@ def suntimes():
     r1 = str(somewhere.next_rising(sun))
     sunrise = datetime.datetime.strptime(str(r1), '%Y/%m/%d %H:%M:%S')
     sr_timedelta = sunrise - datetime.datetime(2020, 1, 1)
-    sr_seconds = sr_timedelta.total_seconds()
+    sr_seconds = sr_timedelta.total_seconds() + (UTC_offset * 3600)
     s1 = str(somewhere.next_setting(sun))
     sunset = datetime.datetime.strptime(str(s1), '%Y/%m/%d %H:%M:%S')
     ss_timedelta = sunset - datetime.datetime(2020, 1, 1)
-    ss_seconds = ss_timedelta.total_seconds()
+    ss_seconds = ss_timedelta.total_seconds() + (UTC_offset * 3600)
     time1 = r1.split(" ")
     time1a = time1[1].split(":")
     time2 = s1.split(" ")
@@ -401,9 +389,17 @@ def suntimes():
     a_timedelta = now - datetime.datetime(2020, 1, 1)
     now_seconds = a_timedelta.total_seconds()
     if IRF == 0:
-        ir_on_hour = int(time1a[0])
+        ir_on_hour = int(time1a[0]) + UTC_offset
+        if ir_on_hour > 23:
+            ir_on_hour -= 24
+        if ir_on_hour < 0:
+            ir_on_hour += 24
         ir_on_mins = int(time1a[1])
-        ir_of_hour = int(time2a[0])
+        ir_of_hour = int(time2a[0]) + UTC_offset
+        if ir_of_hour > 23:
+            ir_of_hour -= 24
+        if ir_of_hour < 0:
+            ir_of_hour += 24
         ir_of_mins = int(time2a[1])
         if Pi_Cam == 9 and (menu == 2 or menu ==7):
           if synced == 1:
@@ -427,9 +423,17 @@ def suntimes():
             else:
                 text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
     if camera_sw == 0:
-        on_hour = int(time1a[0])
+        on_hour = int(time1a[0]) + UTC_offset
+        if on_hour > 23:
+            on_hour -= 24
+        if on_hour < 0:
+            on_hour += 24
         on_mins = int(time1a[1])
-        of_hour = int(time2a[0])
+        of_hour = int(time2a[0]) + UTC_offset
+        if of_hour > 23:
+            of_hour -= 24
+        if of_hour < 0:
+            of_hour += 24
         of_mins = int(time2a[1])
         if menu == 3 and cam2 != "2":
             text(0,5,1,0,1,"SW 1>2 time",14,7)
@@ -1149,7 +1153,6 @@ while True:
             
         elif camera_sw == 1 and cam2 != "2": # SET TIMES - switch on set times 
           if ((camera == 0 and hour == on_hour and mins == on_mins and on_hour != 0) or (camera == 1 and hour == of_hour and mins == of_mins and of_hour != 0)):
-            # SWITCH CAMERA
             camera +=1
             if camera > 1:
                 camera = 0
@@ -2420,7 +2423,7 @@ while True:
                         camera_sw = max(camera_sw,0)
                     text(0,4,3,1,1,str(camera_sws[camera_sw]),14,7)
                     old_camera_sw = camera_sw
-                    #print(camera_sw,old_camera_sw)
+
                     if camera_sw == 2:
                         camera = 0
                         if IRF1 == 0:
@@ -3666,6 +3669,7 @@ while True:
 
                     if g == 5:
                         # video settings
+                        #print(camera_sw,old_camera_sw)
                         menu = 3
                         menu_timer  = time.monotonic()
                         old_capture = Capture
@@ -3851,7 +3855,7 @@ while True:
                         old_camera = camera
                         camera = 1
                         old_camera_sw = camera_sw
-                        camera_sw = 3
+                        camera_sw = 4
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
@@ -3909,7 +3913,7 @@ while True:
                         #print(camera_sw,old_camera_sw)
                         old_camera_sw = camera_sw
                         #print(camera_sw,old_camera_sw)
-                        camera_sw = 3
+                        camera_sw = 4
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
