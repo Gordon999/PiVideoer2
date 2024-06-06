@@ -24,8 +24,6 @@ import threading
 from queue import Queue
 import ephem
 import datetime
-import pytz
-from timezonefinder import TimezoneFinder
 
 # Version
 version = "0.32"
