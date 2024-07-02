@@ -1032,7 +1032,7 @@ def watchdog(qq):
             timestamp = now.strftime("%y%m%d%H%M%S")
             with open("Watchdog.txt", 'a') as f:
                f.write(timestamp + "\n")
-            #os.system("reboot")
+            os.system("reboot")
 
 qq = Queue()
 qq.put(time.monotonic())
