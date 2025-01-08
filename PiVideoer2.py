@@ -79,7 +79,6 @@ sw_ir1     = 19
 
 # IR light
 ir_light   = 13
-cam2_IR    = 1 # set to 1 if 2nd Camera is IR, will control IR light output
 
 # fan ctrl gpio (if use_gpio = 1) This is not the Pi5 active cooler !!
 # DISABLE Pi FAN CONTROL in Preferences > Performance to GPIO 14 !!
@@ -463,7 +462,7 @@ def suntimes():
         on_time = (on_hour * 60) + on_mins
         of_time = (of_hour * 60) + of_mins
         if menu == 3 and cam2 != "2":
-            text(0,5,1,0,1,"SW 1>2 time",14,7)
+            text(0,5,1,0,1,"SW 2>1 time",14,7)
             if synced == 1 and cam2 != "2":
                 if on_mins > 9:
                     text(0,5,2,1,1,str(on_hour) + ":" + str(on_mins),14,7)
@@ -474,7 +473,7 @@ def suntimes():
                     text(0,5,0,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                 else:
                     text(0,5,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
-            text(0,6,1,0,1,"SW 2>1 time",14,7)
+            text(0,6,1,0,1,"SW 1>2 time",14,7)
             if synced == 1 and cam2 != "2":
                 if of_mins > 9:
                     text(0,6,2,1,1,str(of_hour) + ":" + str(of_mins),14,7)
@@ -1124,6 +1123,7 @@ while True:
                 print("SYNC: ", synced)
         except:
             pass
+          
     # check timer
     if time.monotonic() - check_timer > check_time and not encoding:
         check_timer = time.monotonic()
@@ -1161,8 +1161,7 @@ while True:
                         set_parameters1()
               elif ((hour* 60) + mins >= of_time or (hour* 60) + mins < on_time) and camera == 0:
                     camera = 1
-                    if cam2_IR == 1:
-                        led_ir_light.on()
+                    led_ir_light.on()
                     old_camera = camera
                     if menu == 3:
                         text(0,4,1,0,1,"Camera: " + str(camera + 1),14,7)
@@ -1488,7 +1487,6 @@ while True:
                         text(0,0,3,1,1,str(interval - (int(time.monotonic() - timer10))),15,0)
                 if menu == 0:
                     text(0,1,2,0,1,"Low Detect " + str(int((sar5/diff) * 100)) + "%",14,7)
-
             else:
                 # stop recording
                 if encoding and time.time() - ltime > v_length/1000:
@@ -2466,7 +2464,6 @@ while True:
                         camera_sw = max(camera_sw,0)
                     text(0,4,3,1,1,str(camera_sws[camera_sw]),14,7)
                     old_camera_sw = camera_sw
-
                     if camera_sw == 2:
                         camera = 0
                         if IRF1 == 0:
@@ -2474,8 +2471,7 @@ while True:
                         text(0,4,1,0,1,"Camera: " + str(camera + 1),14,7)
                     elif camera_sw == 3:
                         camera = 1
-                        if cam2_IR == 1:
-                            led_ir_light.on()
+                        led_ir_light.on()
                         text(0,4,1,0,1,"Camera: " + str(camera + 1),14,7)
                     if camera_sw >= 2:
                         old_camera = camera
@@ -3678,8 +3674,8 @@ while True:
                         Capture = 0
                         old_camera = camera
                         camera = 0
-                        old_camera_sw = camera_sw
-                        camera_sw = 2
+                        #old_camera_sw = camera_sw
+                        #camera_sw = 2
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
@@ -3736,8 +3732,8 @@ while True:
                         menu_timer  = time.monotonic()
                         old_camera = camera
                         camera = 0
-                        old_camera_sw = camera_sw
-                        camera_sw = 2
+                        #old_camera_sw = camera_sw
+                        #camera_sw = 2
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
@@ -3997,8 +3993,8 @@ while True:
                         Capture = 0
                         old_camera = camera
                         camera = 1
-                        old_camera_sw = camera_sw
-                        camera_sw = 3
+                        #old_camera_sw = camera_sw
+                        #camera_sw = 3
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
@@ -4053,8 +4049,8 @@ while True:
                         menu_timer  = time.monotonic()
                         old_camera = camera
                         camera = 1
-                        old_camera_sw = camera_sw
-                        camera_sw = 3
+                        #old_camera_sw = camera_sw
+                        #camera_sw = 3
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
