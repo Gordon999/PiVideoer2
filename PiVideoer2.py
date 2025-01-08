@@ -1,4 +1,25 @@
 #!/usr/bin/env python3
+
+"""Copyright (c) 2025
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE."""
+
+# Version
+version = "0.34"
+
 import time
 import cv2
 import numpy as np
@@ -24,9 +45,6 @@ import threading
 from queue import Queue
 import ephem
 import datetime
-
-# Version
-version = "0.32"
 
 # Your Location
 somewhere = ephem.Observer()
@@ -187,6 +205,8 @@ vformat       = 0
 sync_timer    = time.monotonic()
 sw_act        = 1
 menu          = -1
+stop_rec      = 0
+rec_stop      = 0
 
 # Camera max exposure 
 # whatever value set it MUST be in shutters list !!
@@ -365,11 +385,16 @@ ir_on_mins  = config[70]
 ir_of_mins  = config[71]
 camera_sw   = config[72]
 
+on_time    = (on_hour * 60) + on_mins
+of_time    = (of_hour * 60) + of_mins
+ir_on_time = (ir_on_hour * 60) + ir_on_mins
+ir_of_time = (ir_of_hour * 60) + ir_of_mins
+
 
 
 def suntimes():
     global sr_seconds,ss_seconds,now_seconds,ir_on_hour,ir_on_mins,ir_of_hour,ir_of_mins,menu,synced,Pi_Cam
-    global on_hour,on_mins,of_hour,of_mins,camera_sw
+    global on_hour,on_mins,of_hour,of_mins,camera_sw,on_time,of_time,IRF,ir_on_time,ir_of_time
     sun = ephem.Sun()
     r1 = str(somewhere.next_rising(sun))
     sunrise = datetime.datetime.strptime(str(r1), '%Y/%m/%d %H:%M:%S')
@@ -399,6 +424,8 @@ def suntimes():
         if ir_of_hour < 0:
             ir_of_hour += 24
         ir_of_mins = int(time2a[1])
+        ir_on_time = (ir_on_hour * 60) + ir_on_mins
+        ir_of_time = (ir_of_hour * 60) + ir_of_mins
         if Pi_Cam == 9 and (menu == 2 or menu ==7):
           if synced == 1:
             if ir_on_mins > 9:
@@ -433,6 +460,8 @@ def suntimes():
         if of_hour < 0:
             of_hour += 24
         of_mins = int(time2a[1])
+        on_time = (on_hour * 60) + on_mins
+        of_time = (of_hour * 60) + of_mins
         if menu == 3 and cam2 != "2":
             text(0,5,1,0,1,"SW 1>2 time",14,7)
             if synced == 1 and cam2 != "2":
@@ -1104,11 +1133,14 @@ while True:
         now = datetime.datetime.now()
         hour = int(now.strftime("%H"))
         mins = int(now.strftime("%M"))
+
+        # get sunrise and sunset times
+        suntimes()
+        
         # switch cameras if switch time reached and clocked synced
-        if camera_sw == 0 and cam2 != "2": # AUTO - switch on sunrise and sunset times
-            suntimes()
-            if sr_seconds > ss_seconds and synced == 1:
-                if now_seconds < ss_seconds:
+        if camera_sw <= 1 and cam2 != "2": # AUTO (Sun) or SET TIMES - switch cameras on set times
+          if synced == 1 and on_time < of_time:
+              if ((hour* 60) + mins >= on_time and (hour* 60) + mins < of_time) and camera == 1:
                     camera = 0
                     if IRF1 == 0:
                         led_ir_light.off()
@@ -1127,8 +1159,7 @@ while True:
                         set_parameters()
                     else:
                         set_parameters1()
-            elif ss_seconds > sr_seconds and synced == 1:
-                if now_seconds < sr_seconds:
+              elif ((hour* 60) + mins >= of_time or (hour* 60) + mins < on_time) and camera == 0:
                     camera = 1
                     if cam2_IR == 1:
                         led_ir_light.on()
@@ -1147,75 +1178,56 @@ while True:
                         set_parameters()
                     else:
                         set_parameters1()
-            save_config = 1
+              save_config = 1
             
-        elif camera_sw == 1 and cam2 != "2": # SET TIMES - switch on set times 
-          if ((camera == 0 and hour == on_hour and mins == on_mins and on_hour != 0) or (camera == 1 and hour == of_hour and mins == of_mins and of_hour != 0)):
-            camera +=1
-            if camera > 1:
-                camera = 0
-            if camera == 1 and cam2_IR == 1:
-                led_ir_light.on()
-            elif IRF1 == 0:
-                led_ir_light.off()
-            old_camera = camera
-            if menu == 3:
-                text(0,4,1,0,1,"Camera: " + str(camera + 1),14,7)
-                text(0,4,3,1,1,str(camera_sws[camera_sw]),14,7)
-            picam2.stop_encoder()
-            picam2.close()
-            picam2.stop()
-            Camera_Version()
-            pygame.display.set_caption('Action ' + cameras[Pi_Cam])
-            # restart circular buffer
-            start_buffer()
-            if camera == 0:
-                set_parameters()
-            else:
-                set_parameters1()
-            save_config = 1
 
-        # switch IR filters if switch time reached and clocked synced
-        if IRF == 0 and Pi_Cam == 9:  # AUTO - switch on sunrise and sunset times
-            suntimes()
-            if sr_seconds > ss_seconds and synced == 1:
-                if now_seconds < ss_seconds:
-                    led_sw_ir.on()
-                    led_sw_ir1.on()
-                    led_ir_light.off()
+        # switch IR filters / Light / RECORD if switch time reached and clocked synced
+        if IRF <= 1: # AUTO (Sun) or SET TIMES - switch IR filter / Light / RECORD at set times
+            if synced == 1 and ir_on_time < ir_of_time:
+                if (hour* 60) + mins >= ir_on_time and (hour* 60) + mins < ir_of_time:
+                    # daytime switch IR filters ON and light OFF
                     IRF1 = 1
-                    if menu == 2 or menu == 7:
-                        text(0,0,1,0,1,"IR Filter",14,7)
-            elif ss_seconds > sr_seconds and synced == 1:
-                if now_seconds < sr_seconds:
-                    led_sw_ir.off()
-                    led_sw_ir1.off()
-                    led_ir_light.on()
-                    IRF1 = 0
-                    if menu == 2 or menu == 7:
-                        text(0,0,2,0,1,"IR Filter",14,7)
-            save_config = 1
-
-        # switch IR filters if switch time reached and clocked synced
-        elif IRF == 1 and Pi_Cam == 9: # SET TIMES - switch on set times
-            if ((IRF1 == 0 and hour == ir_on_hour and mins == ir_on_mins and ir_on_hour != 0) or (IRF1 == 1 and hour == ir_of_hour and mins == ir_of_mins and ir_of_hour != 0)):
-                # SWITCH IR FILTER
-                IRF1 +=1
-                if IRF1 > 1:
-                    IRF1 = 0
-                    led_sw_ir.off()
-                    led_sw_ir1.off()
-                    led_ir_light.on()
-                    if menu == 2 or menu == 7:
-                        text(0,0,2,0,1,"IR Filter",14,7)
-                    
-                else:
+                    stop_rec = 0
                     led_sw_ir.on()
                     led_sw_ir1.on()
                     led_ir_light.off()
                     if menu == 2 or menu == 7:
-                        text(0,0,1,0,1,"IR Filter",14,7)
-            save_config = 1
+                        if rec_stop == 1:
+                            text(0,0,1,0,1,"RECORD",14,7)
+                        elif Pi_Cam == 9:
+                            text(0,0,1,0,1,"IR Filter",14,7)
+                        else:
+                            text(0,0,2,0,1,"Light",14,7)
+                
+                elif ((hour* 60) + mins >= ir_of_time or (hour* 60) + mins < ir_on_time):
+                    if rec_stop == 1: # night time, stop recording, all IR Filters and Light OFF
+                        now = datetime.datetime.now()
+                        timestamp = now.strftime("%y%m%d%H%M%S")
+                        IRF1 = 0
+                        led_sw_ir.off()
+                        led_sw_ir1.off()
+                        led_ir_light.off()
+                        stop_rec = 1
+                        if menu == 2 or menu == 7:
+                            if rec_stop == 1:
+                                text(0,0,2,0,1,"RECORD",14,7)
+                            elif Pi_Cam == 9:
+                                text(0,0,2,0,1,"IR Filter",14,7)
+                            else:
+                                text(0,0,1,0,1,"Light",14,7)
+                    else: # night time switch IR filters OFF and light ON
+                        IRF1 = 0
+                        stop_rec = 0
+                        led_sw_ir.off()
+                        led_sw_ir1.off()
+                        led_ir_light.on()
+                        if menu == 2 or menu == 7:
+                            if rec_stop == 1:
+                                text(0,0,2,0,1,"RECORD",14,7)
+                            elif Pi_Cam == 9:
+                                text(0,0,2,0,1,"IR Filter",14,7)
+                            else:
+                                text(0,0,1,0,1,"Light",14,7)
           
         # shutdown if shutdown hour reached and clocked synced
         if hour > sd_hour - 1 and sd_hour != 0 and time.monotonic() - start_up > 600 and synced == 1 and not encoding:
@@ -2202,6 +2214,21 @@ while True:
                         text(0,1,3,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
                     else:
                         text(0,1,3,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                    ir_on_time = (ir_on_hour * 60) + ir_on_mins
+                    ir_of_time = (ir_of_hour * 60) + ir_of_mins
+                    if ir_on_time >= ir_of_time:
+                        ir_of_hour = ir_on_hour
+                        ir_of_mins = ir_on_mins + 1
+                        if ir_of_mins > 59:
+                            ir_of_mins = 0
+                            ir_of_hour += 1
+                            if ir_of_hour > 23:
+                                ir_of_hour = 0
+                        if ir_of_mins > 9:
+                            text(0,2,3,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                        else:
+                            text(0,2,3,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                    ir_of_time = (ir_of_hour * 60) + ir_of_mins
                     save_config = 1
 
                 elif g == 2 and menu == 2 and Pi_Cam == 9 and IRF == 1:
@@ -2234,9 +2261,25 @@ while True:
                         text(0,2,3,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
                     else:
                         text(0,2,3,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                    ir_on_time = (ir_on_hour * 60) + ir_on_mins
+                    ir_of_time = (ir_of_hour * 60) + ir_of_mins
+                    if ir_of_time <= ir_on_time:
+                        ir_on_hour = ir_of_hour
+                        ir_on_mins = ir_of_mins - 1
+                        if ir_on_mins  < 0:
+                            ir_on_hour -= 1
+                            ir_on_mins = 59
+                            if ir_on_hour < 0:
+                                ir_on_hour = 23
+                        if ir_on_mins > 9:
+                            text(0,1,3,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                        else:
+                            text(0,1,3,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                      
+                    ir_on_time = (ir_on_hour * 60) + ir_on_mins
                     save_config = 1
 
-                elif g == 0 and menu == 2 and (Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6):
+                elif g == 4 and menu == 2 and (Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6):
                     # camera0 focus mode
                     if (h == 0 and event.button == 1) or event.button == 5:
                         AF_f_mode -=1
@@ -2252,18 +2295,19 @@ while True:
                     elif AF_f_mode == 2:
                         picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
                         picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
-                    text(0,0,3,1,1,AF_f_modes[AF_f_mode],14,7)
+                    text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
                     if AF_f_mode == 0:
                         picam2.set_controls({"LensPosition": AF_focus})
-                        text(0,1,2,0,1,"Focus Manual",14,7)
+                        text(0,5,2,0,1,"Focus Manual",14,7)
                         if Pi_Cam == 3:
-                            fd = 1/(AF_focus)
-                            text(0,1,3,1,1,str(fd)[0:5] + "m",14,7)
+                            if AF_focus > 0:
+                                fd = 1/(AF_focus)
+                            text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
                         else:
-                            text(0,1,3,1,1,str(int(101-(AF_focus * 10))),14,7)
+                            text(0,5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
                     else:
-                        text(0,1,3,0,1," ",14,7)
-                        text(0,1,3,1,1," ",14,7)
+                        text(0,5,3,0,1," ",14,7)
+                        text(0,5,3,1,1," ",14,7)
                     fxx = 0
                     fxy = 0
                     fxz = 1
@@ -2271,7 +2315,7 @@ while True:
                         fcount = 0
                     save_config = 1
 
-                elif g == 1 and menu == 2 and AF_f_mode == 0 and (Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6):
+                elif g == 5 and menu == 2 and AF_f_mode == 0 and (Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6):
                     # Camera0 focus manual
                     menu_timer  = time.monotonic()
                     if gv < bh/3:
@@ -2286,17 +2330,18 @@ while True:
                     AF_focus = min(AF_focus,10)
                     picam2.set_controls({"LensPosition": AF_focus})
                     if AF_focus == 0:
-                        text(0,1,3,1,1,"Inf",14,7)
+                        text(0,5,3,1,1,"Inf",14,7)
                     else:
                         if Pi_Cam == 3:
-                            fd = 1/(AF_focus)
-                            text(0,1,3,1,1,str(fd)[0:5] + "m",14,7)
+                            if AF_focus > 0:
+                                fd = 1/(AF_focus)
+                            text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
                         else:
-                            text(0,1,3,1,1,str(int(101-(AF_focus * 10))),14,7)
+                            text(0,5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
                             
                 # g == 3 USED FOR FOCUS VALUE
                 
-                elif g == 4 and menu == 2:
+                elif g == 6 and menu == 2:
                     # AWB setting
                     if (h == 1 and event.button == 1) or event.button == 4:
                         awb +=1
@@ -2320,16 +2365,16 @@ while True:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Custom})
                         cg = (red,blue)
                         picam2.set_controls({"AwbEnable": False,"ColourGains": cg})
-                    text(0,4,3,1,1,str(awbs[awb]),14,7)
+                    text(0,6,3,1,1,str(awbs[awb]),14,7)
                     if awb == 6:
-                        text(0,5,3,1,1,str(red)[0:3],14,7)
-                        text(0,6,3,1,1,str(blue)[0:3],14,7)
+                        text(0,7,3,1,1,str(red)[0:3],14,7)
+                        text(0,8,3,1,1,str(blue)[0:3],14,7)
                     else:
-                        text(0,5,0,1,1,str(red)[0:3],14,7)
-                        text(0,6,0,1,1,str(blue)[0:3],14,7)
+                        text(0,7,0,1,1,str(red)[0:3],14,7)
+                        text(0,8,0,1,1,str(blue)[0:3],14,7)
                     save_config = 1
                     
-                elif g == 5 and menu == 2 and awb == 6:
+                elif g == 7 and menu == 2 and awb == 6:
                     # RED
                     if h == 0 or event.button == 5:
                         red -=0.1
@@ -2339,10 +2384,10 @@ while True:
                         red = min(red,8)
                     cg = (red,blue)
                     picam2.set_controls({"ColourGains": cg})
-                    text(0,5,3,1,1,str(red)[0:3],14,7)
+                    text(0,7,3,1,1,str(red)[0:3],14,7)
                     save_config = 1
                     
-                elif g == 6 and menu == 2  and awb == 6:
+                elif g == 8 and menu == 2  and awb == 6:
                     # BLUE
                     if h == 0 or event.button == 5:
                         blue -=0.1
@@ -2352,10 +2397,10 @@ while True:
                         blue = min(blue,8)
                     cg = (red,blue)
                     picam2.set_controls({"ColourGains": cg})
-                    text(0,6,3,1,1,str(blue)[0:3],14,7)
+                    text(0,8,3,1,1,str(blue)[0:3],14,7)
                     save_config = 1
 
-                elif g == 7 and menu == 2:
+                elif g == 17 and menu == 2:
                     # SATURATION
                     if (h == 1 and event.button == 1) or event.button == 4:
                         saturation +=1
@@ -2367,7 +2412,7 @@ while True:
                     text(0,7,3,1,1,str(saturation),14,7)
                     save_config = 1
                     
-                elif g == 8 and menu == 2:
+                elif g == 9 and menu == 2:
                     # DENOISE
                     if (h == 1 and event.button == 1) or event.button == 4:
                         denoise +=1
@@ -2382,7 +2427,7 @@ while True:
                     elif denoise == 2:
                         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
 
-                    text(0,8,3,1,1,str(denoises[denoise]),14,7)
+                    text(0,9,3,1,1,str(denoises[denoise]),14,7)
                     save_config = 1
 
                 elif g == 0 and menu == 2 and Pi_Cam == 9:
@@ -2445,6 +2490,28 @@ while True:
                             set_parameters()
                         else:
                             set_parameters1()
+                    if camera_sw == 0:
+                      suntimes()
+                      if synced == 1 and cam2 != "2":
+                        if on_mins > 9:
+                            text(0,5,clr,1,1,str(on_hour) + ":" + str(on_mins),14,7)
+                        else:
+                            text(0,5,clr,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
+                      else:
+                        if on_mins > 9:
+                            text(0,5,0,1,1,str(on_hour) + ":" + str(on_mins),14,7)
+                        else:
+                            text(0,5,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
+                      if synced == 1 and cam2 != "2":
+                        if of_mins > 9:
+                            text(0,6,clr,1,1,str(of_hour) + ":" + str(of_mins),14,7)
+                        else:
+                            text(0,6,clr,1,1,str(of_hour) + ":0" + str(of_mins),14,7)
+                      else:
+                        if of_mins > 9:
+                            text(0,6,0,1,1,str(of_hour) + ":" + str(of_mins),14,7)
+                        else:
+                            text(0,6,0,1,1,str(of_hour) + ":0" + str(of_mins),14,7)
                     save_config = 1
 
                 elif g == 1 and menu == 3:
@@ -2564,6 +2631,21 @@ while True:
                         text(0,5,3,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                     else:
                         text(0,5,3,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
+                    on_time = (on_hour * 60) + on_mins
+                    of_time = (of_hour * 60) + of_mins
+                    if on_time >= of_time:
+                        of_hour = on_hour
+                        of_mins = on_mins + 1
+                        if of_mins > 59:
+                            of_hour += 1
+                            of_mins = 0
+                            if of_hour > 23:
+                                of_hour = 0
+                        if of_mins > 9:
+                            text(0,6,3,1,1,str(of_hour) + ":" + str(of_mins),14,7)
+                        else:
+                            text(0,6,3,1,1,str(of_hour) + ":0" + str(of_mins),14,7)
+                        of_time = (of_hour * 60) + of_mins
                     save_config = 1
 
                 elif g == 6 and menu == 3 and camera_sw == 1:
@@ -2596,6 +2678,21 @@ while True:
                         text(0,6,3,1,1,str(of_hour) + ":" + str(of_mins),14,7)
                     else:
                         text(0,6,3,1,1,str(of_hour) + ":0" + str(of_mins),14,7)
+                    on_time = (on_hour * 60) + on_mins
+                    of_time = (of_hour * 60) + of_mins
+                    if of_time <= on_time:
+                        on_hour = of_hour
+                        on_mins = of_mins - 1
+                        if on_mins  < 0:
+                            on_hour -= 1
+                            on_mins = 59
+                            if on_hour < 0:
+                                on_hour = 23
+                        if on_mins > 9:
+                            text(0,5,3,1,1,str(on_hour) + ":" + str(on_mins),14,7)
+                        else:
+                            text(0,5,3,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
+                        on_time = (on_hour * 60) + on_mins
                     save_config = 1
                         
                     
@@ -2636,6 +2733,21 @@ while True:
                             msgRectobj.topleft = (10,35)
                             windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
                             pygame.display.update()
+
+                elif g == 2  and show == 1 and (frames > 0):
+                    #Show Video
+                    vids = glob.glob(vid_dir + '2*.mp4')
+                    vids.sort()
+                    jpgs = Jpegs[q].split("/")
+                    jp = jpgs[4][:-4]
+                    stop = 0
+                    for x in range(len(vids)-1,-1,-1):
+                        vide = vids[x].split("/")
+                        vid = vide[4][:-4]
+                        print(vid,jp)
+                        if vid == jp and stop == 0:
+                            os.system("vlc " + vid_dir + vid + '.mp4')
+                            stop = 1
 
                 elif g == 3 and menu == 4:
                     # MP4 FPS
@@ -3267,6 +3379,21 @@ while True:
                         text(0,1,3,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
                     else:
                         text(0,1,3,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                    ir_on_time = (ir_on_hour * 60) + ir_on_mins
+                    ir_of_time = (ir_of_hour * 60) + ir_of_mins
+                    if ir_on_time >= ir_of_time:
+                        ir_of_hour = ir_on_hour
+                        ir_of_mins = ir_on_mins + 1
+                        if ir_of_mins > 59:
+                            ir_of_mins = 0
+                            ir_of_hour += 1
+                            if ir_of_hour > 23:
+                                ir_of_hour = 0
+                        if ir_of_mins > 9:
+                            text(0,2,3,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                        else:
+                            text(0,2,3,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                    ir_of_time = (ir_of_hour * 60) + ir_of_mins
                     save_config = 1
 
                 elif g == 2 and menu == 7 and Pi_Cam == 9 and IRF == 1:
@@ -3299,9 +3426,25 @@ while True:
                         text(0,2,3,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
                     else:
                         text(0,2,3,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                    ir_on_time = (ir_on_hour * 60) + ir_on_mins
+                    ir_of_time = (ir_of_hour * 60) + ir_of_mins
+                    if ir_of_time <= ir_on_time:
+                        ir_on_hour = ir_of_hour
+                        ir_on_mins = ir_of_mins - 1
+                        if ir_on_mins  < 0:
+                            ir_on_hour -= 1
+                            ir_on_mins = 59
+                            if ir_on_hour < 0:
+                                ir_on_hour = 23
+                        if ir_on_mins > 9:
+                            text(0,1,3,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                        else:
+                            text(0,1,3,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                      
+                    ir_on_time = (ir_on_hour * 60) + ir_on_mins
                     save_config = 1
                     
-                elif g == 0 and menu == 7 and (Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6):
+                elif g == 4 and menu == 7 and (Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6):
                     # camera1 focus mode
                     if (h == 0 and event.button == 1) or event.button == 5:
                         AF_f_mode1 -=1
@@ -3317,18 +3460,20 @@ while True:
                     elif AF_f_mode1 == 2:
                         picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
                         picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
-                    text(0,0,3,1,1,AF_f_modes[AF_f_mode1],14,7)
+                    text(0,4,3,1,1,AF_f_modes[AF_f_mode1],14,7)
                     if AF_f_mode1 == 0:
                         picam2.set_controls({"LensPosition": AF_focus1})
                         text(0,1,2,0,1,"Focus Manual",14,7)
                         if Pi_Cam == 3:
+                            if AF_focus == 0:
+                                AF_focus = 0.01
                             fd = 1/(AF_focus1)
-                            text(0,1,3,1,1,str(fd)[0:5] + "m",14,7)
+                            text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
                         else:
-                            text(0,1,3,1,1,str(int(101-(AF_focus1 * 10))),14,7)
+                            text(0,5,3,1,1,str(int(101-(AF_focus1 * 10))),14,7)
                     else:
-                        text(0,1,3,0,1," ",14,7)
-                        text(0,1,3,1,1," ",14,7)
+                        text(0,5,3,0,1," ",14,7)
+                        text(0,5,3,1,1," ",14,7)
                     fxx = 0
                     fxy = 0
                     fxz = 1
@@ -3336,7 +3481,7 @@ while True:
                         fcount = 0
                     save_config = 1
 
-                elif g == 1 and menu == 7 and AF_f_mode1 == 0 and (Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6):
+                elif g == 5 and menu == 7 and AF_f_mode1 == 0 and (Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6):
                     # Camera1 focus manual
                     menu_timer  = time.monotonic()
                     if gv < bh/3:
@@ -3355,13 +3500,13 @@ while True:
                     else:
                         if Pi_Cam == 3:
                             fd = 1/(AF_focus1)
-                            text(0,1,3,1,1,str(fd)[0:5] + "m",14,7)
+                            text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
                         else:
-                            text(0,1,3,1,1,str(int(101-(AF_focus1 * 10))),14,7)
+                            text(0,5,3,1,1,str(int(101-(AF_focus1 * 10))),14,7)
                             
                 # g == 3 USED FOR FOCUS VALUE
                 
-                elif g == 4 and menu == 7:
+                elif g == 6 and menu == 7:
                     # AWB1 setting
                     if (h == 1 and event.button == 1) or event.button == 4:
                         awb1 +=1
@@ -3385,16 +3530,16 @@ while True:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Custom})
                         cg = (red1,blue1)
                         picam2.set_controls({"AwbEnable": False,"ColourGains": cg})
-                    text(0,4,3,1,1,str(awbs[awb1]),14,7)
+                    text(0,6,3,1,1,str(awbs[awb1]),14,7)
                     if awb1 == 6:
-                        text(0,5,3,1,1,str(red1)[0:3],14,7)
-                        text(0,6,3,1,1,str(blue1)[0:3],14,7)
+                        text(0,7,3,1,1,str(red1)[0:3],14,7)
+                        text(0,8,3,1,1,str(blue1)[0:3],14,7)
                     else:
-                        text(0,5,0,1,1,str(red1)[0:3],14,7)
-                        text(0,6,0,1,1,str(blue1)[0:3],14,7)
+                        text(0,7,0,1,1,str(red1)[0:3],14,7)
+                        text(0,8,0,1,1,str(blue1)[0:3],14,7)
                     save_config = 1
                     
-                elif g == 5 and menu == 7 and awb1 == 6:
+                elif g == 7 and menu == 7 and awb1 == 6:
                     # RED1
                     if h == 0 or event.button == 5:
                         red1 -=0.1
@@ -3404,10 +3549,10 @@ while True:
                         red1 = min(red1,8)
                     cg = (red1,blue1)
                     picam2.set_controls({"ColourGains": cg})
-                    text(0,5,3,1,1,str(red1)[0:3],14,7)
+                    text(0,7,3,1,1,str(red1)[0:3],14,7)
                     save_config = 1
                     
-                elif g == 6 and menu == 7  and awb1 == 6:
+                elif g == 8 and menu == 7  and awb1 == 6:
                     # BLUE1
                     if h == 0 or event.button == 5:
                         blue1 -=0.1
@@ -3417,10 +3562,10 @@ while True:
                         blue1 = min(blue1,8)
                     cg = (red1,blue1)
                     picam2.set_controls({"ColourGains": cg})
-                    text(0,6,3,1,1,str(blue1)[0:3],14,7)
+                    text(0,8,3,1,1,str(blue1)[0:3],14,7)
                     save_config = 1
 
-                elif g == 7 and menu == 7:
+                elif g == 17 and menu == 7:
                     # SATURATION1
                     if (h == 1 and event.button == 1) or event.button == 4:
                         saturation1 +=1
@@ -3432,7 +3577,7 @@ while True:
                     text(0,7,3,1,1,str(saturation1),14,7)
                     save_config = 1
                    
-                elif g == 8 and menu == 7:
+                elif g == 9 and menu == 7:
                     # DENOISE1
                     if (h == 1 and event.button == 1) or event.button == 4:
                         denoise1 +=1
@@ -3447,7 +3592,7 @@ while True:
                     elif denoise1 == 2:
                         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
 
-                    text(0,8,3,1,1,str(denoises[denoise1]),14,7)
+                    text(0,9,3,1,1,str(denoises[denoise1]),14,7)
                     save_config = 1
 
                 elif g == 0 and menu == 7 and Pi_Cam == 9:
@@ -3534,7 +3679,7 @@ while True:
                         old_camera = camera
                         camera = 0
                         old_camera_sw = camera_sw
-                        camera_sw = 3
+                        camera_sw = 2
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
@@ -3592,28 +3737,28 @@ while True:
                         old_camera = camera
                         camera = 0
                         old_camera_sw = camera_sw
-                        camera_sw = 3
+                        camera_sw = 2
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                        pygame.display.set_caption('Action ' + cameras[Pi_Cam])
+                        pygame.display.set_caption('Action ' + cameras[Pi_Cam] + ' : ' + str(camera))
                         for d in range(0,10):
                             button(0,d,0)
                         if Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6:
-                            text(0,0,2,0,1,"Focus",14,7)
+                            text(0,4,2,0,1,"Focus",14,7)
                             if AF_f_mode == 0:
-                                text(0,1,2,0,1,"Focus Manual",14,7)
+                                text(0,5,2,0,1,"Focus Manual",14,7)
                                 if Pi_Cam == 3:
                                     fd = 1/(AF_focus)
-                                    text(0,1,3,1,1,str(fd)[0:5] + "m",14,7)
+                                    text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
                                 else:
-                                    text(0,1,3,1,1,str(int(101-(AF_focus * 10))),14,7)
+                                    text(0,5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
 
-                            text(0,0,3,1,1,AF_f_modes[AF_f_mode],14,7)
+                            text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
                             if fxz != 1:
                                 text(0,0,3,1,1,"Spot",14,7)
-                        elif Pi_Cam == 9:
+                        if Pi_Cam == 9:
                             text(0,1,1,0,1,"IRF ON time",14,7)
                             if IRF == 0:
                                 clr = 2
@@ -3640,20 +3785,18 @@ while True:
                                     text(0,2,0,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
                                 else:
                                     text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
-                        text(0,4,5,0,1,"AWB",14,7)
-                        text(0,4,3,1,1,str(awbs[awb]),14,7)
-                        text(0,5,5,0,1,"Red",14,7)
-                        text(0,6,5,0,1,"Blue",14,7)
+                        text(0,6,5,0,1,"AWB",14,7)
+                        text(0,6,3,1,1,str(awbs[awb]),14,7)
+                        text(0,7,5,0,1,"Red",14,7)
+                        text(0,8,5,0,1,"Blue",14,7)
                         if awb == 6:
-                            text(0,5,3,1,1,str(red)[0:3],14,7)
-                            text(0,6,3,1,1,str(blue)[0:3],14,7)
+                            text(0,7,3,1,1,str(red)[0:3],14,7)
+                            text(0,8,3,1,1,str(blue)[0:3],14,7)
                         else:
-                            text(0,5,0,1,1,str(red)[0:3],14,7)
-                            text(0,6,0,1,1,str(blue)[0:3],14,7)
-                        text(0,7,5,0,1,"Saturation",14,7)
-                        text(0,7,3,1,1,str(saturation),14,7)
-                        text(0,8,5,0,1,"Denoise",14,7)
-                        text(0,8,3,1,1,str(denoises[denoise]),14,7)
+                            text(0,7,0,1,1,str(red)[0:3],14,7)
+                            text(0,8,0,1,1,str(blue)[0:3],14,7)
+                        text(0,9,5,0,1,"Denoise",14,7)
+                        text(0,9,3,1,1,str(denoises[denoise]),14,7)
                         if Pi_Cam == 9:
                             if IRF1 == 0:
                                 text(0,0,2,0,1,"IR Filter",14,7)
@@ -3661,13 +3804,14 @@ while True:
                                 text(0,0,1,0,1,"IR Filter",14,7)
                             text(0,0,3,1,1,IR_filters[IRF],14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
+                        ir_on_time = (ir_on_hour * 60) + ir_on_mins
+                        ir_of_time = (ir_of_hour * 60) + ir_of_mins
                         # restart circular buffer
                         start_buffer()
                         set_parameters()
 
                     if g == 5:
                         # video settings
-                        #print(camera_sw,old_camera_sw)
                         menu = 3
                         menu_timer  = time.monotonic()
                         old_capture = Capture
@@ -3694,7 +3838,7 @@ while True:
                                 clr = 2
                             else:
                                 clr = 3
-                            text(0,5,1,0,1,"SW 1>2 time",14,7)
+                            text(0,5,1,0,1,"SW 2>1 time",14,7)
                             if synced == 1 and cam2 != "2":
                                 if on_mins > 9:
                                     text(0,5,clr,1,1,str(on_hour) + ":" + str(on_mins),14,7)
@@ -3705,7 +3849,7 @@ while True:
                                     text(0,5,0,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                                 else:
                                     text(0,5,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
-                            text(0,6,1,0,1,"SW 2>1 time",14,7)
+                            text(0,6,1,0,1,"SW 1>2 time",14,7)
                             if synced == 1 and cam2 != "2":
                                 if of_mins > 9:
                                     text(0,6,clr,1,1,str(of_hour) + ":" + str(of_mins),14,7)
@@ -3756,6 +3900,7 @@ while True:
                             pygame.display.update()
                             text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
                         text(0,1,2,0,1,"Video",14,7)
+                        text(0,2,2,0,1,"Show Video",14,7)
                         text(0,3,2,0,1,"MP4 fps",14,7)
                         text(0,3,3,1,1,str(mp4_fps),14,7)
                         text(0,4,2,0,1,"annotate MP4",14,7)
@@ -3853,7 +3998,7 @@ while True:
                         old_camera = camera
                         camera = 1
                         old_camera_sw = camera_sw
-                        camera_sw = 4
+                        camera_sw = 3
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
@@ -3908,30 +4053,28 @@ while True:
                         menu_timer  = time.monotonic()
                         old_camera = camera
                         camera = 1
-                        #print(camera_sw,old_camera_sw)
                         old_camera_sw = camera_sw
-                        #print(camera_sw,old_camera_sw)
-                        camera_sw = 4
+                        camera_sw = 3
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                        pygame.display.set_caption('Action ' + cameras[Pi_Cam])
+                        pygame.display.set_caption('Action ' + cameras[Pi_Cam] + ' : ' + str(camera))
                         for d in range(0,10):
                             button(0,d,0)
                         if Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6:
-                            text(0,0,2,0,1,"Focus",14,7)
+                            text(0,4,2,0,1,"Focus",14,7)
                             if AF_f_mode == 0:
-                                text(0,1,2,0,1,"Focus Manual",14,7)
+                                text(0,5,2,0,1,"Focus Manual",14,7)
                                 if Pi_Cam == 3:
                                     fd = 1/(AF_focus)
-                                    text(0,1,3,1,1,str(fd)[0:5] + "m",14,7)
+                                    text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
                                 else:
-                                    text(0,1,3,1,1,str(int(101-(AF_focus * 10))),14,7)
-                            text(0,0,3,1,1,AF_f_modes[AF_f_mode],14,7)
+                                    text(0,5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
+                            text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
                             if fxz != 1:
-                                text(0,0,3,1,1,"Spot",14,7)
-                        elif Pi_Cam == 9:
+                                text(0,5,3,1,1,"Spot",14,7)
+                        if Pi_Cam == 9:
                             text(0,1,1,0,1,"IRF ON time",14,7)
                             if IRF == 0:
                                 clr = 2
@@ -3958,25 +4101,23 @@ while True:
                                     text(0,2,0,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
                                 else:
                                     text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
-                        text(0,4,5,0,1,"AWB",14,7)
-                        text(0,4,3,1,1,str(awbs[awb1]),14,7)
-                        text(0,5,5,0,1,"Red",14,7)
-                        text(0,6,5,0,1,"Blue",14,7)
+                        text(0,6,5,0,1,"AWB",14,7)
+                        text(0,6,3,1,1,str(awbs[awb1]),14,7)
+                        text(0,7,5,0,1,"Red",14,7)
+                        text(0,8,5,0,1,"Blue",14,7)
                         if awb1 == 6:
-                            text(0,5,3,1,1,str(red1)[0:3],14,7)
-                            text(0,6,3,1,1,str(blue1)[0:3],14,7)
+                            text(0,7,3,1,1,str(red1)[0:3],14,7)
+                            text(0,8,3,1,1,str(blue1)[0:3],14,7)
                         else:
-                            text(0,5,0,1,1,str(red1)[0:3],14,7)
-                            text(0,6,0,1,1,str(blue1)[0:3],14,7)
-                        text(0,7,5,0,1,"Saturation",14,7)
-                        text(0,7,3,1,1,str(saturation1),14,7)
-                        text(0,8,5,0,1,"Denoise",14,7)
-                        text(0,8,3,1,1,str(denoises[denoise1]),14,7)
+                            text(0,7,0,1,1,str(red1)[0:3],14,7)
+                            text(0,8,0,1,1,str(blue1)[0:3],14,7)
+                        text(0,9,5,0,1,"Denoise",14,7)
+                        text(0,9,3,1,1,str(denoises[denoise1]),14,7)
                         if Pi_Cam == 9:
                             if IRF1 == 0:
-                                text(0,9,2,0,1,"IR Filter",14,7)
+                                text(0,0,2,0,1,"IR Filter",14,7)
                             else:
-                                text(0,9,1,0,1,"IR Filter",14,7)
+                                text(0,0,1,0,1,"IR Filter",14,7)
                             text(0,9,3,1,1,IR_filters[IRF],14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
                         # restart circular buffer
