@@ -43,7 +43,7 @@ Note buttons with RED text use right mouse click, others left click. Click on le
 
 ## Connections
 
-![connections](connections.jpg)
+![connections](CONNECTIONS.jpg)
 
 ## Setup
 
