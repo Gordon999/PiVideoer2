@@ -40,3 +40,11 @@ sudo pip3 install ephem --break-system-packages (or use venv!!)
 Download PiVideoer2.py and copy to /home/《user》
 
 Note buttons with RED text use right mouse click, others left click. Click on left or right part of button as appropriate.
+
+## Connections
+
+![connections](connections.jpg)
+
+## Setup
+
+![setup](setup.jpg)
