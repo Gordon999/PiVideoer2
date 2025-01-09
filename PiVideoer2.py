@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "0.34"
+version = "0.35"
 
 import time
 import cv2
@@ -51,7 +51,7 @@ somewhere = ephem.Observer()
 somewhere.lat = '51.49340' # set your location latitude
 somewhere.lon = '00.00980' # set your location longtitude
 somewhere.elevation = 100  # set your location height
-UTC_offset = 1             # set your local time offset to UTC
+UTC_offset = 0             # set your local time offset to UTC
 
 # set screen size
 scr_width  = 800
@@ -83,7 +83,10 @@ ir_light   = 13
 # fan ctrl gpio (if use_gpio = 1) This is not the Pi5 active cooler !!
 # DISABLE Pi FAN CONTROL in Preferences > Performance to GPIO 14 !!
 fan        = 14
-fan_ctrl   = 1  # 0 for OFF. 
+fan_ctrl   = 1  # 0 for OFF.
+
+# enable watchdog
+watch = False
 
 # set default config parameters
 v_crop        = 150     # size of vertical detection window *
@@ -1062,10 +1065,11 @@ def watchdog(qq):
                f.write(timestamp + "\n")
             os.system("reboot")
 
-qq = Queue()
-qq.put(time.monotonic())
-watch_thread = threading.Thread(target=watchdog, args=(qq,))
-watch_thread.start()
+if watch == True:
+    qq = Queue()
+    qq.put(time.monotonic())
+    watch_thread = threading.Thread(target=watchdog, args=(qq,))
+    watch_thread.start()
 watch_timer = time.monotonic()
 watch_time  = 10
 menu_timer  = time.monotonic()
@@ -1088,7 +1092,7 @@ while True:
         text(0,0,2,0,1,"CPU Temp",14,7)
         text(0,0,3,1,1,str(int(temp)),14,7)
     # watchdog
-    if time.monotonic() - watch_timer > watch_time:
+    if time.monotonic() - watch_timer > watch_time and watch == True:
         qq.put(time.monotonic())
         watch_timer = time.monotonic()
     # menu timer
@@ -1265,6 +1269,9 @@ while True:
             if use_gpio == 1 and fan_ctrl == 1:
                 led_fan.value = 0
             stop_thread = True
+            led_sw_ir.off()
+            led_sw_ir1.off()
+            led_ir_light.off()
             pygame.quit()
             time.sleep(5)
             os.system("sudo shutdown -h now")
@@ -1517,7 +1524,7 @@ while True:
                     free = (os.statvfs('/'))
                     SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
                     ss = str(int(freeram)) + " - " + str(int(SD_storage))
-                    Jpegs = glob.glob(h_user + "/" + '/Videos/2*.jpg')
+                    Jpegs = glob.glob(h_user + '/Videos/2*.jpg')
                     Rpegs = glob.glob('/run/shm/2*.jpg')
                     for x in range(0,len(Rpegs)):
                          Jpegs.append(Rpegs[x])
@@ -1875,6 +1882,9 @@ while True:
                     if use_gpio == 1 and fan_ctrl == 1:
                         led_fan.value = 0
                     stop_thread = True
+                    led_sw_ir.off()
+                    led_sw_ir1.off()
+                    led_ir_light.off()
                     pygame.quit()
                     
 # MENU 0 ====================================================================================================
@@ -2700,7 +2710,7 @@ while True:
                     if menu == 4:
                         text(0,6,3,1,1,"VIDEO ",14,7)
                         text(0,7,3,1,1,"ALL VIDS ",14,7)
-                    Jpegs = glob.glob(h_user + "/" + '/Videos/2*.jpg')
+                    Jpegs = glob.glob(h_user + '/Videos/2*.jpg')
                     Rpegs = glob.glob('/run/shm/2*.jpg')
                     for x in range(0,len(Rpegs)):
                        Jpegs.append(Rpegs[x])
@@ -2730,19 +2740,34 @@ while True:
                             windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
                             pygame.display.update()
 
-                elif g == 2  and show == 1 and (frames > 0):
+                elif g == 2  and show == 1: # and (frames > 0):
                     #Show Video
                     vids = glob.glob(vid_dir + '2*.mp4')
+                    Rids = glob.glob('/run/shm/2*.mp4')
+                    for x in range(0,len(Rids)):
+                       vids.append(Rids[x])
                     vids.sort()
+                    print(vids)
                     jpgs = Jpegs[q].split("/")
-                    jp = jpgs[4][:-4]
+                    print(jpgs,jpgs[1])
+                    if jpgs[1] != 'run':
+                        jp = jpgs[4][:-4]
+                    else:
+                        jp = jpgs[3][:-4]
                     stop = 0
                     for x in range(len(vids)-1,-1,-1):
                         vide = vids[x].split("/")
-                        vid = vide[4][:-4]
+                        if vide[1] != 'run':
+                            vid = vide[4][:-4]
+                        else:
+                            vid = vide[3][:-4]
                         print(vid,jp)
                         if vid == jp and stop == 0:
-                            os.system("vlc " + vid_dir + vid + '.mp4')
+                            if vide[1] != 'run':
+                                os.system("vlc /" + vide[1] + "/" + vide[2] + "/" + vide[3] + "/" + vid + '.mp4')
+                            else:
+                                os.system("vlc /" + vide[1] + "/" + vide[2] + "/" + vid + '.mp4')
+
                             stop = 1
 
                 elif g == 3 and menu == 4:
@@ -3591,7 +3616,7 @@ while True:
                     text(0,9,3,1,1,str(denoises[denoise1]),14,7)
                     save_config = 1
 
-                elif g == 0 and menu == 7 and Pi_Cam == 9:
+                elif g == 0 and menu == 7 and Pi_Cam > -1:
                     # IR FILTER
                     if (h == 1 and event.button == 1) or event.button == 4:
                         IRF +=1
@@ -3993,8 +4018,6 @@ while True:
                         Capture = 0
                         old_camera = camera
                         camera = 1
-                        #old_camera_sw = camera_sw
-                        #camera_sw = 3
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
@@ -4049,8 +4072,6 @@ while True:
                         menu_timer  = time.monotonic()
                         old_camera = camera
                         camera = 1
-                        #old_camera_sw = camera_sw
-                        #camera_sw = 3
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
@@ -4070,7 +4091,7 @@ while True:
                             text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
                             if fxz != 1:
                                 text(0,5,3,1,1,"Spot",14,7)
-                        if Pi_Cam == 9:
+                        if Pi_Cam > -1:
                             text(0,1,1,0,1,"IRF ON time",14,7)
                             if IRF == 0:
                                 clr = 2
@@ -4109,12 +4130,12 @@ while True:
                             text(0,8,0,1,1,str(blue1)[0:3],14,7)
                         text(0,9,5,0,1,"Denoise",14,7)
                         text(0,9,3,1,1,str(denoises[denoise1]),14,7)
-                        if Pi_Cam == 9:
+                        if Pi_Cam > -1:
                             if IRF1 == 0:
                                 text(0,0,2,0,1,"IR Filter",14,7)
                             else:
                                 text(0,0,1,0,1,"IR Filter",14,7)
-                            text(0,9,3,1,1,IR_filters[IRF],14,7)
+                            text(0,0,3,1,1,IR_filters[IRF],14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
                         # restart circular buffer
                         start_buffer()
