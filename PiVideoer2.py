@@ -1286,7 +1286,7 @@ while True:
             dc = min(dc,1)
             if temp > fan_low and use_gpio == 1:
                 led_fan.value = dc
-                if menu ==4 :
+                if menu == 5:
                     text(0,7,1,0,1,"Fan High  " + str(int(dc*100)) + "%",14,7)
             elif temp < fan_low and use_gpio == 1:
                 led_fan.value = 0
@@ -2747,9 +2747,7 @@ while True:
                     for x in range(0,len(Rids)):
                        vids.append(Rids[x])
                     vids.sort()
-                    print(vids)
                     jpgs = Jpegs[q].split("/")
-                    print(jpgs,jpgs[1])
                     if jpgs[1] != 'run':
                         jp = jpgs[4][:-4]
                     else:
@@ -2761,7 +2759,6 @@ while True:
                             vid = vide[4][:-4]
                         else:
                             vid = vide[3][:-4]
-                        print(vid,jp)
                         if vid == jp and stop == 0:
                             if vide[1] != 'run':
                                 os.system("vlc /" + vide[1] + "/" + vide[2] + "/" + vide[3] + "/" + vid + '.mp4')
@@ -2946,7 +2943,7 @@ while True:
                         oldimg = []
                     
                 elif g == 8 and menu == 4 and ( frames > 0 or ram_frames > 0):
-                    # SHOW ALL videos
+                    # SHOW ALL STILLS
                     menu_timer  = time.monotonic()
                     text(0,8,2,0,1,"STOP",14,7)
                     text(0,8,2,1,1,"     ",14,7)
@@ -2981,7 +2978,7 @@ while True:
                                     pygame.display.update()
                                     time.sleep(0.5)
                     text(0,8,2,0,1,"SHOW ALL",14,7)
-                    text(0,8,2,1,1,"Videos",14,7)
+                    text(0,8,2,1,1,"Stills",14,7)
                     q = nq - 1
 
                 elif g == 9 and menu == 4 and show == 1:
@@ -3920,7 +3917,7 @@ while True:
                             pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,pre_height,scr_width-bw,scr_height))
                             pygame.display.update()
                             text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
-                        text(0,1,2,0,1,"Video",14,7)
+                        text(0,1,2,0,1,"Still",14,7)
                         text(0,2,2,0,1,"Show Video",14,7)
                         text(0,3,2,0,1,"MP4 fps",14,7)
                         text(0,3,3,1,1,str(mp4_fps),14,7)
@@ -3940,7 +3937,7 @@ while True:
                         text(0,7,3,0,1,"DELETE",14,7)
                         text(0,7,3,1,1,"ALL VIDS  ",14,7)
                         text(0,8,2,0,1,"SHOW ALL",14,7)
-                        text(0,8,2,1,1,"Videos",14,7)
+                        text(0,8,2,1,1,"Stills",14,7)
                         text(0,9,2,0,1,"MAKE FULL",14,7)
                         text(0,9,2,1,1,"MP4",14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
@@ -4149,9 +4146,7 @@ while True:
                         if os.path.exists('mylist.txt'):
                             os.remove('mylist.txt')
                         txtvids = []
-                        #print(camera_sw,old_camera_sw)
                         camera_sw = old_camera_sw
-                        #print(camera_sw,old_camera_sw)
                         if camera != old_camera:
                             camera = old_camera
                             picam2.stop_encoder()
