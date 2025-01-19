@@ -40,6 +40,8 @@ Download PiVideoer2.py and copy to /home/《user》
 
 Note buttons with RED text use right mouse click, others left click. Click on left or right part of button as appropriate.
 
+If you want a version that continuously records videos try https://github.com/Gordon999/PiVideoer3
+
 ## Connections
 
 ![connections](CONNECTIONS.jpg)
