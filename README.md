@@ -44,6 +44,10 @@ Note buttons with RED text use right mouse click, others left click. Click on le
 
 If you want a version that continuously records videos try https://github.com/Gordon999/PiVideoer3
 
+## Menu Structure
+
+![Menu Structure](PiVideoer2.jpg)
+
 ## Connections
 
 ![connections](CONNECTIONS.jpg)
