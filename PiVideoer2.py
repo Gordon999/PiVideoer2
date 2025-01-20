@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "0.37"
+version = "0.38"
 
 import time
 import cv2
@@ -209,17 +209,8 @@ sw_act        = 1
 menu          = -1
 stop_rec      = 0
 rec_stop      = 0
-
-# Camera max exposure 
-# whatever value set it MUST be in shutters list !!
-max_v1      = 1
-max_v2      = 11
-max_v3      = 112
-max_hq      = 650
-max_16mp    = 200
-max_64mp    = 435
-max_gs      = 15
-max_v9      = 15
+show_vid      = 1
+old_show_vid  = show_vid
 
 # apply timestamp to videos
 def apply_timestamp(request):
@@ -239,13 +230,9 @@ Home_Files  = []
 Home_Files.append(os.getlogin())
 vid_dir = "/home/" + Home_Files[0]+ "/Videos/"
 
-cameras       = ['','Pi v1','Pi v2','Pi v3','Pi HQ','Arducam 16MP','Arducam 64MP','Pi GS','Arducam Owlsight','imx290']
-camids        = ['','ov5647','imx219','imx708','imx477','imx519','arduca','imx296','ov64a4','imx290']
-swidths       = [0,2592,3280,4608,4056,4656,9152,1456,9248,1920]
-sheights      = [0,1944,2464,2592,3040,3496,6944,1088,6944,1080]
-max_gains     = [64,     255,      40,      64,      88,      64,      64,      64,      64,    64]
-max_shutters  = [0,   max_v1, max_v2,   max_v3,  max_hq,max_16mp,max_64mp,  max_gs,max_64mp, max_v9]
-mags          = [64,     255,      40,      64,      88,      64,      64,      64,      64,     64]
+cameras       = ['', 'Pi v1', 'Pi v2', 'Pi v3', 'Pi HQ','Arducam 16MP','Arducam 64MP', 'Pi GS','Arducam Owlsight','imx290']
+camids        = ['','ov5647','imx219','imx708','imx477',      'imx519',      'arduca','imx296',          'ov64a4','imx290']
+max_gains     = [64,     255,      40,      64,      88,            64,            64,      64,                64,      64]
 modes         = ['manual','normal','short','long']
 meters        = ['CentreWeighted','Spot','Matrix']
 awbs          = ['auto','tungsten','fluorescent','indoor','daylight','cloudy','custom']
@@ -488,7 +475,6 @@ def suntimes():
                 else:
                     text(0,6,0,1,1,str(of_hour) + ":0" + str(of_mins),14,7)
 
-
 bw = int(scr_width/8)
 cwidth  = scr_width - bw
 cheight = scr_height
@@ -515,7 +501,7 @@ if threshold == 0:
         v_length = (interval - 1) * 1000
 
 def Camera_Version():
-  global lores_width,lores_height,swidth,sheight,vid_width,vid_height,old_vf,bw,Pi_Cam,cam0,cam1,camera,camids,max_gain,max_vf,max_vfs
+  global lores_width,lores_height,vid_width,vid_height,old_vf,bw,Pi_Cam,cam0,cam1,camera,camids,max_gain,max_vf,max_vfs
   global a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,pre_width,scr_width,scr_height,scientif
   if os.path.exists('libcams.txt'):
       os.rename('libcams.txt', 'oldlibcams.txt')
@@ -551,8 +537,6 @@ def Camera_Version():
       a = int(pre_width/2)
   if b > pre_height - h_crop:
       b = int(pre_height/2)
-  swidth = swidths[Pi_Cam]
-  sheight = sheights[Pi_Cam]
   # set video size
   if Pi_Cam == 7:
       vid_width  = 1456
@@ -568,20 +552,18 @@ def Camera_Version():
       lores_height = 960
   if Pi_Cam != -1:
       print("Camera:",cameras[Pi_Cam])
-  elif cam0 != "1" and camera == 0:
+  elif cam0 != "0" and camera == 0:
       Pi_Cam      = 0
       cameras[0]  = cam0
       camids[0]   = cam0[0:6]
       print("Camera:",cameras[Pi_Cam])
-      max_shutter = max_shutters[Pi_Cam]
       max_gain    = max_gains[Pi_Cam]
       mag         = int(max_gain/4)
-  elif cam1 != "2" and camera == 1:
+  elif cam1 != "1" and camera == 1:
       Pi_Cam      = 0
       cameras[0]  = cam1
       camids[0]   = cam1[0:6]
       print("Camera:",cameras[Pi_Cam])
-      max_shutter = max_shutters[Pi_Cam]
       max_gain    = max_gains[Pi_Cam]
       mag         = int(max_gain/4)
   else:
@@ -856,7 +838,9 @@ zoom    = 0
 st = os.statvfs("/run/shm/")
 sfreeram = (st.f_bavail * st.f_frsize)/1100000
 
-# check if clock synchronised                           
+# check if clock synchronised
+if os.path.exists("/run/shm/sync.txt"):
+    os.rename('/run/shm/sync.txt','/run/shm/oldsync.txt')
 os.system("timedatectl >> /run/shm/sync.txt")
 # read sync.txt file
 try:
@@ -1065,6 +1049,7 @@ menu_time   = 30
 
 while True:
     time.sleep(1/dspeed)
+    # read Pi5 temperature and fan speed
     if Pi == 5 and menu == 5:
         text(0,0,2,0,1,"CPU Temp/FAN",13,7)
         if os.path.exists ('fantxt.txt'): 
@@ -1076,6 +1061,7 @@ while True:
             if line == "":
                 line = 0
             text(0,0,3,1,1,str(int(temp)) + " / " + str(int(line)),14,7)
+    # read non Pi5 temperature
     elif menu == 5:
         text(0,0,2,0,1,"CPU Temp",14,7)
         text(0,0,3,1,1,str(int(temp)),14,7)
@@ -1270,9 +1256,7 @@ while True:
         st = os.statvfs("/run/shm/")
         freeram = (st.f_bavail * st.f_frsize)/1100000
 
-    if trace > 1:
-        print ("GLOB FILES")
-        
+       
     # GET AN IMAGE
     cur = picam2.capture_array("lores")
     img = cv2.cvtColor(cur,cv2.COLOR_YUV420p2BGR)
@@ -1362,7 +1346,7 @@ while True:
             if preview == 1:
                 imagep = pygame.surfarray.make_surface(ar5 * 201)
                 imagep.set_colorkey(0, pygame.RLEACCEL)
-            # copy video files to sd card if auto_save = 1 or low RAM, after defined period of no activity
+            # copy RAM video files to sd card if auto_save = 1 or low RAM, after defined period of no activity
             st = os.statvfs("/run/shm/")
             freeram = (st.f_bavail * st.f_frsize)/1100000
             if (ram_frames > 0 and auto_time > 0 and time.monotonic() - last > auto_time and auto_save == 1 and not encoding and menu == -1) or (ram_frames > 0 and freeram < ram_limit and not encoding and menu == -1):
@@ -1440,7 +1424,8 @@ while True:
                         image3 = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
                     ltime = time.time()
                     detect = 1
-                    if ES > 0 and use_gpio == 1: # trigger external camera
+                    # trigger external camera
+                    if ES > 0 and use_gpio == 1: 
                         led_s_focus.on()
                         time.sleep(0.25)
                         led_s_trig.on()
@@ -1597,7 +1582,7 @@ while True:
                         if SD_F_Act == 0:
                             Capture = 0 # stop
                         else:
-                            # remove oldest video from SD card
+                            # remove oldest video and jpg from SD card
                             Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
                             Videos.sort()
                             if os.path.getsize(Videos[q]) > 0:
@@ -1620,10 +1605,9 @@ while True:
                         text(0,1,6,0,1,"RECORD",16,3)
                         text(0,1,6,1,1,ss,12,3)
                     pause_thread = False
-        # show frame
-        gcount +=1
-        if gcount > 0:
-          gcount = 0
+        if show == 0 and show_vid == 1:
+          if trace > 0:
+              print ("SHOW FRAME")
           if zoom == 0:
               cropped = pygame.transform.scale(image,(pre_width,pre_height))
           else:
@@ -1662,7 +1646,10 @@ while True:
           if (Pi_Cam == 3 or Pi_Cam == 8) and fxz != 1 and zoom == 0 and menu == 3:
             pygame.draw.rect(windowSurfaceObj,(200,0,0),Rect(int(fxx*cwidth),int(fxy*cheight*.75),int(fxz*cwidth),int(fxz*cheight)),1)
           pygame.display.update(0,0,scr_width-bw,scr_height)
-
+          
+        elif show_vid == 0 and show == 0:
+            pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,0,pre_width,pre_height))
+            pygame.display.update(0,0,pre_width,pre_height)
         if vidjr != 1:
            oldimg[:] = gray[:]
         vidjr = 0
@@ -2697,10 +2684,21 @@ while True:
                             text(0,5,3,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
                         on_time = (on_hour * 60) + on_mins
                     save_config = 1
-                        
+
+                                        
                     
 # MENU 4 ====================================================================================================
-                   
+                elif g == 0 and menu == 4:
+                   # SHOW CAMERA
+                   show_vid +=1
+                   if show_vid > 1:
+                       show_vid = 0
+                   old_show_vid = show_vid
+                   if show_vid == 0:
+                       text(0,0,3,1,1,"OFF",14,7)
+                   else:
+                       text(0,0,3,1,1,"ON",14,7)
+                            
                 elif g == 1 and menu == 4 and show == 1 and (frames > 0 or ram_frames > 0):
                     # SHOW next still
                     menu_timer  = time.monotonic()
@@ -3932,6 +3930,11 @@ while True:
                             pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,pre_height,scr_width-bw,scr_height))
                             pygame.display.update()
                             text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
+                        text(0,0,2,0,1,"SHOW Camera",14,7)
+                        if old_show_vid == 0:
+                            text(0,0,3,1,1,"OFF",14,7)
+                        else:
+                            text(0,0,3,1,1,"ON",14,7)
                         text(0,1,2,0,1,"Still",14,7)
                         text(0,2,2,0,1,"Show Video",14,7)
                         text(0,3,2,0,1,"MP4 fps",14,7)
