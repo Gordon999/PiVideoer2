@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "0.35"
+version = "0.37"
 
 import time
 import cv2
@@ -239,7 +239,7 @@ Home_Files  = []
 Home_Files.append(os.getlogin())
 vid_dir = "/home/" + Home_Files[0]+ "/Videos/"
 
-cameras       = ['Unknown','Pi v1','Pi v2','Pi v3','Pi HQ','Arducam 16MP','Arducam 64MP','Pi GS','Arducam Owlsight','imx290']
+cameras       = ['','Pi v1','Pi v2','Pi v3','Pi HQ','Arducam 16MP','Arducam 64MP','Pi GS','Arducam Owlsight','imx290']
 camids        = ['','ov5647','imx219','imx708','imx477','imx519','arduca','imx296','ov64a4','imx290']
 swidths       = [0,2592,3280,4608,4056,4656,9152,1456,9248,1920]
 sheights      = [0,1944,2464,2592,3040,3496,6944,1088,6944,1080]
@@ -342,7 +342,7 @@ fan_low     = config[25]
 fan_high    = config[26]
 det_high    = config[27]
 quality     = config[28]
-check_time    = config[29]
+check_time  = config[29]
 sd_hour     = config[30]
 vformat     = config[31]
 threshold2  = config[32]
@@ -356,7 +356,7 @@ mp4_anno    = config[39]
 SD_F_Act    = config[40]
 dspeed      = config[41]
 IRF         = config[42]
-camera      = config[43]
+#camera      = config[43]
 mode1       = config[44]
 speed1      = config[45]
 gain1       = config[46]
@@ -464,9 +464,9 @@ def suntimes():
         of_mins = int(time2a[1])
         on_time = (on_hour * 60) + on_mins
         of_time = (of_hour * 60) + of_mins
-        if menu == 3 and cam2 != "2":
+        if menu == 3 and cam1 != "2":
             text(0,5,1,0,1,"SW 2>1 time",14,7)
-            if synced == 1 and cam2 != "2":
+            if synced == 1 and cam1 != "2":
                 if on_mins > 9:
                     text(0,5,2,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                 else:
@@ -477,7 +477,7 @@ def suntimes():
                 else:
                     text(0,5,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
             text(0,6,1,0,1,"SW 1>2 time",14,7)
-            if synced == 1 and cam2 != "2":
+            if synced == 1 and cam1 != "2":
                 if of_mins > 9:
                     text(0,6,2,1,1,str(of_hour) + ":" + str(of_mins),14,7)
                 else:
@@ -515,8 +515,8 @@ if threshold == 0:
         v_length = (interval - 1) * 1000
 
 def Camera_Version():
-  global lores_width,lores_height,swidth,sheight,vid_width,vid_height,old_vf,bw,Pi_Cam,cam1,cam2,camera,camids,max_camera,same_cams,max_gain,max_vf,max_vfs
-  global a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,vwidths,vheights,pre_width,scr_width,scr_height,scientif
+  global lores_width,lores_height,swidth,sheight,vid_width,vid_height,old_vf,bw,Pi_Cam,cam0,cam1,camera,camids,max_gain,max_vf,max_vfs
+  global a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,pre_width,scr_width,scr_height,scientif
   if os.path.exists('libcams.txt'):
       os.rename('libcams.txt', 'oldlibcams.txt')
   os.system("rpicam-vid --list-cameras >> libcams.txt")
@@ -528,52 +528,23 @@ def Camera_Version():
     while line:
         camstxt.append(line.strip())
         line = file.readline()
-  max_camera = 0
-  same_cams  = 0
+  cam0 = "0"
   cam1 = "1"
-  cam2 = "2"
-  vwidths  = []
-  vheights = []
   cwidth = scr_width - bw
   cheight = scr_height
   for x in range(0,len(camstxt)):
-    # Determine if both cameras are the same model
+    # Determine both cameras 
     if camstxt[x][0:4] == "0 : ":
+        cam0 = camstxt[x][4:10]
+    if camstxt[x][0:4] == "1 : ":
         cam1 = camstxt[x][4:10]
-    elif camstxt[x][0:4] == "1 : ":
-        cam2 = camstxt[x][4:10]
-    elif cam1 != "1" and cam2 == "2" and camera == 0:
-        forms = camstxt[x].split(" ")
-        for q in range(0,len(forms)):
-           if "x" in forms[q] and "/" not in forms[q]:
-              qwidth,qheight = forms[q].split("x")
-              vwidths.append(int(qwidth))
-              vheights.append(int(qheight))
-    elif cam1 != "1" and cam2 != "2" and camera == 1:
-        forms = camstxt[x].split(" ")
-        for q in range(0,len(forms)):
-           if "x" in forms[q] and "/" not in forms[q]:
-              qwidth,qheight = forms[q].split("x")
-              vwidths.append(int(qwidth))
-              vheights.append(int(qheight))
-   
-    # Determine MAXIMUM number of cameras available 
-    if camstxt[x][0:4] == "3 : " and max_camera < 3:
-        max_camera = 3
-    elif camstxt[x][0:4] == "2 : " and max_camera < 2:
-        max_camera = 2
-    elif camstxt[x][0:4] == "1 : " and max_camera < 1:
-        max_camera = 1
-        
-  if max_camera == 1 and cam1 == cam2:
-      same_cams = 1
   Pi_Cam = -1
   for x in range(0,len(camids)):
      if camera == 0:
-        if cam1 == camids[x]:
+        if cam0 == camids[x]:
             Pi_Cam = x
      elif camera == 1:
-        if cam2 == camids[x]:
+        if cam1 == camids[x]:
             Pi_Cam = x
   max_gain = max_gains[Pi_Cam]
   if a > pre_width - v_crop:
@@ -595,16 +566,33 @@ def Camera_Version():
       # set lores size
       lores_width  = 1280
       lores_height = 960
-  if Pi_Cam == -1:
-        print("No Camera Found")
-        pygame.display.quit()
-        sys.exit()
+  if Pi_Cam != -1:
+      print("Camera:",cameras[Pi_Cam])
+  elif cam0 != "1" and camera == 0:
+      Pi_Cam      = 0
+      cameras[0]  = cam0
+      camids[0]   = cam0[0:6]
+      print("Camera:",cameras[Pi_Cam])
+      max_shutter = max_shutters[Pi_Cam]
+      max_gain    = max_gains[Pi_Cam]
+      mag         = int(max_gain/4)
+  elif cam1 != "2" and camera == 1:
+      Pi_Cam      = 0
+      cameras[0]  = cam1
+      camids[0]   = cam1[0:6]
+      print("Camera:",cameras[Pi_Cam])
+      max_shutter = max_shutters[Pi_Cam]
+      max_gain    = max_gains[Pi_Cam]
+      mag         = int(max_gain/4)
+  else:
+      print("No Camera Found")
+      pygame.display.quit()
+      sys.exit()
             
 Camera_Version()
-if IRF == 0 or camera_sw == 0:
-    suntimes()
+suntimes()
 
-print(Pi_Cam,cam1,cam2)
+print(Pi_Cam,cam0,cam1)
 
 # mp4_annotation parameters
 colour = (255, 255, 255)
@@ -984,12 +972,12 @@ def main_menu():
     text(0,1,6,0,1,"RECORD",16,3)
     text(0,2,1,0,1,"DETECTION",14,7)
     text(0,2,1,1,1,"Settings",14,7)
-    if cam2 != "2":
+    if cam1 != "2":
         text(0,3,1,0,1,"CAMERA 1",14,7)
     else:
         text(0,3,1,0,1,"CAMERA ",14,7)
     text(0,3,1,1,1,"Settings 1",14,7)
-    if cam2 != "2":
+    if cam1 != "2":
         text(0,4,1,0,1,"CAMERA 1",14,7)
     else:
         text(0,4,1,0,1,"CAMERA ",14,7)
@@ -999,12 +987,12 @@ def main_menu():
     text(0,7,1,0,1,"OTHER",14,7)
     text(0,7,1,1,1,"Settings ",14,7)
     if ((ram_frames > 0 or frames > 0) and menu == -1):
-        text(0,6,1,0,1,"SHOW,EDIT or",13,7)
+        text(0,6,1,0,1,"SHOW or",13,7)
         text(0,6,1,1,1,"DELETE",13,7)
     else:
-        text(0,6,0,0,1,"SHOW,EDIT or",13,7)
+        text(0,6,0,0,1,"SHOW or",13,7)
         text(0,6,0,1,1,"DELETE",13,7)
-    if Pi == 5 and cam2 != "2":
+    if Pi == 5 and cam1 != "2":
         text(0,8,1,0,1,"CAMERA 2",14,7)
         text(0,8,1,1,1,"Settings 1",14,7)
         text(0,9,1,0,1,"CAMERA 2",14,7)
@@ -1142,8 +1130,8 @@ while True:
         suntimes()
         
         # switch cameras if switch time reached and clocked synced
-        if camera_sw <= 1 and cam2 != "2": # AUTO (Sun) or SET TIMES - switch cameras on set times
-          if synced == 1 and on_time < of_time:
+        if camera_sw <= 1 and cam1 != "2": # AUTO (Sun) or SET TIMES - switch cameras on set times
+          if synced == 1 and on_time < of_time and menu != 1 and menu != 2 and menu != 6 and menu != 7:
               if ((hour* 60) + mins >= on_time and (hour* 60) + mins < of_time) and camera == 1:
                     camera = 0
                     if IRF1 == 0:
@@ -1195,13 +1183,8 @@ while True:
                     led_sw_ir1.on()
                     led_ir_light.off()
                     if menu == 2 or menu == 7:
-                        if rec_stop == 1:
-                            text(0,0,1,0,1,"RECORD",14,7)
-                        elif Pi_Cam == 9:
-                            text(0,0,1,0,1,"IR Filter",14,7)
-                        else:
-                            text(0,0,2,0,1,"Light",14,7)
-                
+                        text(0,0,1,0,1,"IR Filter",14,7)
+                 
                 elif ((hour* 60) + mins >= ir_of_time or (hour* 60) + mins < ir_on_time):
                     if rec_stop == 1: # night time, stop recording, all IR Filters and Light OFF
                         now = datetime.datetime.now()
@@ -1212,12 +1195,7 @@ while True:
                         led_ir_light.off()
                         stop_rec = 1
                         if menu == 2 or menu == 7:
-                            if rec_stop == 1:
-                                text(0,0,2,0,1,"RECORD",14,7)
-                            elif Pi_Cam == 9:
-                                text(0,0,2,0,1,"IR Filter",14,7)
-                            else:
-                                text(0,0,1,0,1,"Light",14,7)
+                            text(0,0,2,0,1,"IR Filter",14,7)
                     else: # night time switch IR filters OFF and light ON
                         IRF1 = 0
                         stop_rec = 0
@@ -1225,12 +1203,7 @@ while True:
                         led_sw_ir1.off()
                         led_ir_light.on()
                         if menu == 2 or menu == 7:
-                            if rec_stop == 1:
-                                text(0,0,2,0,1,"RECORD",14,7)
-                            elif Pi_Cam == 9:
-                                text(0,0,2,0,1,"IR Filter",14,7)
-                            else:
-                                text(0,0,1,0,1,"Light",14,7)
+                            text(0,0,2,0,1,"IR Filter",14,7)
           
         # shutdown if shutdown hour reached and clocked synced
         if hour > sd_hour - 1 and sd_hour != 0 and time.monotonic() - start_up > 600 and synced == 1 and not encoding:
@@ -2192,7 +2165,7 @@ while True:
                     
 # MENU 2 ====================================================================================================
 
-                elif g == 1 and menu == 2 and Pi_Cam == 9 and IRF == 1:
+                elif g == 1 and menu == 2 and IRF == 1:
                     # SWITCH IR FILTER ON TIME
                     if h == 1 and event.button == 3:
                         ir_on_hour +=1
@@ -2239,7 +2212,7 @@ while True:
                     ir_of_time = (ir_of_hour * 60) + ir_of_mins
                     save_config = 1
 
-                elif g == 2 and menu == 2 and Pi_Cam == 9 and IRF == 1:
+                elif g == 2 and menu == 2 and IRF == 1:
                     # SWITCH IR FILTER OFF TIME
                     if h == 1 and event.button == 3:
                         ir_of_hour +=1
@@ -2438,7 +2411,7 @@ while True:
                     text(0,9,3,1,1,str(denoises[denoise]),14,7)
                     save_config = 1
 
-                elif g == 0 and menu == 2 and Pi_Cam == 9:
+                elif g == 0 and menu == 2:
                     # IR FILTER
                     if (h == 1 and event.button == 1) or event.button == 4:
                         IRF +=1
@@ -2459,11 +2432,35 @@ while True:
                         led_sw_ir1.on()
                         led_ir_light.off()
                         text(0,0,1,0,1,"IR Filter",14,7)
+
+                    if IRF == 0:
+                        suntimes()
+                    if synced == 1 and IRF == 0:
+                        if ir_on_mins > 9:
+                            text(0,1,2,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                        else:
+                            text(0,1,2,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                    elif IRF == 0:
+                        if ir_on_mins > 9:
+                            text(0,1,0,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                        else:
+                            text(0,1,0,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                    if synced == 1 and IRF == 0:                
+                        if ir_of_mins > 9:
+                            text(0,2,2,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                        else:
+                            text(0,2,2,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                    elif IRF == 0:
+                        if ir_of_mins > 9:
+                            text(0,2,0,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                        else:
+                            text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                     
                     save_config = 1
                     
 # MENU 3 ====================================================================================================
                     
-                elif g == 4 and menu == 3 and Pi == 5 and cam2 != "2":
+                elif g == 4 and menu == 3 and Pi == 5 and cam1 != "2":
                     # SWITCH CAMERA MODE
                     if (h == 1 and event.button == 1) or event.button == 4:
                         camera_sw +=1
@@ -2498,7 +2495,7 @@ while True:
                             set_parameters1()
                     if camera_sw == 0:
                       suntimes()
-                      if synced == 1 and cam2 != "2":
+                      if synced == 1 and cam1 != "2":
                         if on_mins > 9:
                             text(0,5,clr,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                         else:
@@ -2508,7 +2505,7 @@ while True:
                             text(0,5,0,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                         else:
                             text(0,5,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
-                      if synced == 1 and cam2 != "2":
+                      if synced == 1 and cam1 != "2":
                         if of_mins > 9:
                             text(0,6,clr,1,1,str(of_hour) + ":" + str(of_mins),14,7)
                         else:
@@ -2705,7 +2702,7 @@ while True:
 # MENU 4 ====================================================================================================
                    
                 elif g == 1 and menu == 4 and show == 1 and (frames > 0 or ram_frames > 0):
-                    # SHOW next video
+                    # SHOW next still
                     menu_timer  = time.monotonic()
                     if menu == 4:
                         text(0,6,3,1,1,"VIDEO ",14,7)
@@ -2740,20 +2737,21 @@ while True:
                             windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
                             pygame.display.update()
 
-                elif g == 2  and show == 1: # and (frames > 0):
+                elif g == 2  and show == 1 and menu == 4:
                     #Show Video
                     vids = glob.glob(vid_dir + '2*.mp4')
                     Rids = glob.glob('/run/shm/2*.mp4')
                     for x in range(0,len(Rids)):
                        vids.append(Rids[x])
                     vids.sort()
-                    jpgs = Jpegs[q].split("/")
-                    if jpgs[1] != 'run':
+                    if len(Jpegs) > 0:
+                      jpgs = Jpegs[q].split("/")
+                      if jpgs[1] != 'run':
                         jp = jpgs[4][:-4]
-                    else:
+                      else:
                         jp = jpgs[3][:-4]
-                    stop = 0
-                    for x in range(len(vids)-1,-1,-1):
+                      stop = 0
+                      for x in range(len(vids)-1,-1,-1):
                         vide = vids[x].split("/")
                         if vide[1] != 'run':
                             vid = vide[4][:-4]
@@ -3367,7 +3365,7 @@ while True:
                     
 # MENU 7 ====================================================================================================
 
-                elif g == 1 and menu == 7 and Pi_Cam == 9 and IRF == 1:
+                elif g == 1 and menu == 7 and IRF == 1:
                     # SWITCH IR1 FILTER ON TIME
                     if h == 1 and event.button == 3:
                         ir_on_hour +=1
@@ -3414,7 +3412,7 @@ while True:
                     ir_of_time = (ir_of_hour * 60) + ir_of_mins
                     save_config = 1
 
-                elif g == 2 and menu == 7 and Pi_Cam == 9 and IRF == 1:
+                elif g == 2 and menu == 7 and IRF == 1:
                     # SWITCH IR1 FILTER OFF TIME
                     if h == 1 and event.button == 3:
                         ir_of_hour +=1
@@ -3634,6 +3632,28 @@ while True:
                         led_sw_ir1.on()
                         led_ir_light.off()
                         text(0,0,1,0,1,"IR Filter",14,7)
+                    if IRF == 0:
+                        suntimes()
+                    if synced == 1 and IRF == 0:
+                        if ir_on_mins > 9:
+                            text(0,1,2,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                        else:
+                            text(0,1,2,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                    elif IRF == 0:
+                        if ir_on_mins > 9:
+                            text(0,1,0,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                        else:
+                            text(0,1,0,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                    if synced == 1 and IRF == 0:                
+                        if ir_of_mins > 9:
+                            text(0,2,2,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                        else:
+                            text(0,2,2,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                    elif IRF == 0:
+                        if ir_of_mins > 9:
+                            text(0,2,0,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                        else:
+                            text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
                     save_config = 1
                     
 # MENUS ====================================================================================================
@@ -3696,8 +3716,6 @@ while True:
                         Capture = 0
                         old_camera = camera
                         camera = 0
-                        #old_camera_sw = camera_sw
-                        #camera_sw = 2
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
@@ -3754,8 +3772,6 @@ while True:
                         menu_timer  = time.monotonic()
                         old_camera = camera
                         camera = 0
-                        #old_camera_sw = camera_sw
-                        #camera_sw = 2
                         picam2.stop_encoder()
                         picam2.close()
                         picam2.stop()
@@ -3776,7 +3792,7 @@ while True:
                             text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
                             if fxz != 1:
                                 text(0,0,3,1,1,"Spot",14,7)
-                        if Pi_Cam == 9:
+                        if Pi_Cam > -1:
                             text(0,1,1,0,1,"IRF ON time",14,7)
                             if IRF == 0:
                                 clr = 2
@@ -3815,12 +3831,11 @@ while True:
                             text(0,8,0,1,1,str(blue)[0:3],14,7)
                         text(0,9,5,0,1,"Denoise",14,7)
                         text(0,9,3,1,1,str(denoises[denoise]),14,7)
-                        if Pi_Cam == 9:
-                            if IRF1 == 0:
-                                text(0,0,2,0,1,"IR Filter",14,7)
-                            else:
-                                text(0,0,1,0,1,"IR Filter",14,7)
-                            text(0,0,3,1,1,IR_filters[IRF],14,7)
+                        if IRF1 == 0:
+                            text(0,0,2,0,1,"IR Filter",14,7)
+                        else:
+                            text(0,0,1,0,1,"IR Filter",14,7)
+                        text(0,0,3,1,1,IR_filters[IRF],14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
                         ir_on_time = (ir_on_hour * 60) + ir_on_mins
                         ir_of_time = (ir_of_hour * 60) + ir_of_mins
@@ -3851,13 +3866,13 @@ while True:
                         text(0,2,3,1,1,str(pre_frames) + " Secs",14,7)
                         text(0,0,2,0,1,"Interval S",14,7)
                         text(0,0,3,1,1,str(interval),14,7)
-                        if cam2 != "2":
+                        if cam1 != "2":
                             if camera_sw == 0:
                                 clr = 2
                             else:
                                 clr = 3
                             text(0,5,1,0,1,"SW 2>1 time",14,7)
-                            if synced == 1 and cam2 != "2":
+                            if synced == 1 and cam1 != "2":
                                 if on_mins > 9:
                                     text(0,5,clr,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                                 else:
@@ -3868,7 +3883,7 @@ while True:
                                 else:
                                     text(0,5,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
                             text(0,6,1,0,1,"SW 1>2 time",14,7)
-                            if synced == 1 and cam2 != "2":
+                            if synced == 1 and cam1 != "2":
                                 if of_mins > 9:
                                     text(0,6,clr,1,1,str(of_hour) + ":" + str(of_mins),14,7)
                                 else:
@@ -4007,7 +4022,7 @@ while True:
                             USB_storage = ((1 - (usedusb.f_bavail / usedusb.f_blocks)) * 100)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
 
-                    if g == 8 and cam2 != "2":
+                    if g == 8 and cam1 != "2":
                         # camera 2 settings 1
                         menu = 6
                         menu_timer  = time.monotonic()
@@ -4063,7 +4078,7 @@ while True:
                         start_buffer()
                         set_parameters1()
 
-                    if g == 9 and cam2 != "2":
+                    if g == 9 and cam1 != "2":
                         # camera 2 settings 2
                         menu = 7
                         menu_timer  = time.monotonic()
@@ -4094,7 +4109,7 @@ while True:
                                 clr = 2
                             else:
                                 clr = 3
-                            if synced == 1 and cam2 != "2":
+                            if synced == 1 and cam1 != "2":
                                 if ir_on_mins > 9:
                                     text(0,1,clr,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
                                 else:
@@ -4105,7 +4120,7 @@ while True:
                                 else:
                                     text(0,1,0,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
                             text(0,2,1,0,1,"IRF OFF time",14,7)
-                            if synced == 1 and cam2 != "2":
+                            if synced == 1 and cam1 != "2":
                                 if ir_of_mins > 9:
                                     text(0,2,clr,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
                                 else:
@@ -4127,12 +4142,11 @@ while True:
                             text(0,8,0,1,1,str(blue1)[0:3],14,7)
                         text(0,9,5,0,1,"Denoise",14,7)
                         text(0,9,3,1,1,str(denoises[denoise1]),14,7)
-                        if Pi_Cam > -1:
-                            if IRF1 == 0:
-                                text(0,0,2,0,1,"IR Filter",14,7)
-                            else:
-                                text(0,0,1,0,1,"IR Filter",14,7)
-                            text(0,0,3,1,1,IR_filters[IRF],14,7)
+                        if IRF1 == 0:
+                            text(0,0,2,0,1,"IR Filter",14,7)
+                        else:
+                            text(0,0,1,0,1,"IR Filter",14,7)
+                        text(0,0,3,1,1,IR_filters[IRF],14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
                         # restart circular buffer
                         start_buffer()
