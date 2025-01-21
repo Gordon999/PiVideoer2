@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "0.38"
+version = "0.39"
 
 import time
 import cv2
@@ -230,9 +230,11 @@ Home_Files  = []
 Home_Files.append(os.getlogin())
 vid_dir = "/home/" + Home_Files[0]+ "/Videos/"
 
-cameras       = ['', 'Pi v1', 'Pi v2', 'Pi v3', 'Pi HQ','Arducam 16MP','Arducam 64MP', 'Pi GS','Arducam Owlsight','imx290']
-camids        = ['','ov5647','imx219','imx708','imx477',      'imx519',      'arduca','imx296',          'ov64a4','imx290']
-max_gains     = [64,     255,      40,      64,      88,            64,            64,      64,                64,      64]
+cameras       = ['', 'Pi v1', 'Pi v2', 'Pi v3', 'Pi HQ','Arducam 16MP','Arducam 64MP', 'Pi GS','Arducam Owlsight','imx290','imx500','ov9281']
+camids        = ['','ov5647','imx219','imx708','imx477',      'imx519',      'arduca','imx296',          'ov64a4','imx290','imx500','ov9281']
+max_gains     = [64,     255,      40,      64,      88,            64,            64,      64,                64,      64,      64,      64]
+swidths       = [ 0,    2592,    3280,    4608,    4056,          4656,          9152,    1456,              9248,    1920,    1920,    1280]
+sheights      = [ 0,    1944,     2464,   2592,    3040,          3496,          6944,    1088,              6944,    1080,    1080,     800]
 modes         = ['manual','normal','short','long']
 meters        = ['CentreWeighted','Spot','Matrix']
 awbs          = ['auto','tungsten','fluorescent','indoor','daylight','cloudy','custom']
@@ -537,6 +539,8 @@ def Camera_Version():
       a = int(pre_width/2)
   if b > pre_height - h_crop:
       b = int(pre_height/2)
+  swidth = swidths[Pi_Cam]
+  sheight = sheights[Pi_Cam]
   # set video size
   if Pi_Cam == 7:
       vid_width  = 1456
@@ -544,6 +548,12 @@ def Camera_Version():
       # set lores size
       lores_width  = 1456
       lores_height = 1088
+  elif Pi_Cam == 11:
+      vid_width  = 1280
+      vid_height = 800
+      # set lores size
+      lores_width  = 1280
+      lores_height = 800
   else:
       vid_width  = 1920
       vid_height = 1080
@@ -598,6 +608,7 @@ USB_storage = 100
 h_user = "/home/" + os.getlogin( )
 m_user = "/media/" + os.getlogin( )
 
+# generate a mask window
 if not os.path.exists(h_user + '/CMask.bmp'):
    pygame.init()
    bredColor =   pygame.Color(100,100,100)
@@ -676,19 +687,19 @@ def set_parameters():
         elif mode == 3:
             picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Long})
     time.sleep(1)
-    if awb == 0:
+    if awb == 0 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Auto})
-    elif awb == 1:
+    elif awb == 1 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Tungsten})
-    elif awb == 2:
+    elif awb == 2 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Fluorescent})
-    elif awb == 3:
+    elif awb == 3 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Indoor})
-    elif awb == 4:
+    elif awb == 4 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Daylight})
-    elif awb == 5:
+    elif awb == 5 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Cloudy})
-    elif awb == 6:
+    elif awb == 6 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Custom})
         cg = (red,blue)
         picam2.set_controls({"AwbEnable": False,"ColourGains": cg})
@@ -713,7 +724,8 @@ def set_parameters():
         picam2.set_controls({"AeMeteringMode": controls.AeMeteringModeEnum.Spot})
     elif meter == 2:
         picam2.set_controls({"AeMeteringMode": controls.AeMeteringModeEnum.Matrix})
-    picam2.set_controls({"Saturation": saturation/10})
+    if Pi_Cam != 11:
+        picam2.set_controls({"Saturation": saturation/10})
     picam2.set_controls({"Sharpness": sharpness})
     if denoise == 0:
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Off})
@@ -743,20 +755,19 @@ def set_parameters1():
             picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Short})
         elif mode1 == 3:
             picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Long})
-    #time.sleep(1)
-    if awb1 == 0:
+    if awb1 == 0 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Auto})
-    elif awb1 == 1:
+    elif awb1 == 1 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Tungsten})
-    elif awb1 == 2:
+    elif awb1 == 2 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Fluorescent})
-    elif awb1 == 3:
+    elif awb1 == 3 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Indoor})
-    elif awb1 == 4:
+    elif awb1 == 4 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Daylight})
-    elif awb1 == 5:
+    elif awb1 == 5 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Cloudy})
-    elif awb1 == 6:
+    elif awb1 == 6 and Pi_Cam != 11:
         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Custom})
         cg = (red1,blue1)
         picam2.set_controls({"AwbEnable": False,"ColourGains": cg})
@@ -781,7 +792,8 @@ def set_parameters1():
         picam2.set_controls({"AeMeteringMode": controls.AeMeteringModeEnum.Spot})
     elif meter1 == 2:
         picam2.set_controls({"AeMeteringMode": controls.AeMeteringModeEnum.Matrix})
-    picam2.set_controls({"Saturation": saturation1/10})
+    if Pi_Cam != 11:
+        picam2.set_controls({"Saturation": saturation1/10})
     picam2.set_controls({"Sharpness": sharpness1})
     if denoise1 == 0:
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Off})
@@ -1019,7 +1031,7 @@ temp = float(str(cpu_temp[1])[:-1])
 
 old_capture = Capture
 
-if awb == 0:
+if awb == 0 and Pi_Cam != 11:
     picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Auto})
 
 def watchdog(qq):
@@ -2149,6 +2161,18 @@ while True:
                     picam2.set_controls({"Sharpness": sharpness})
                     text(0,8,3,1,1,str(sharpness),14,7)
                     save_config = 1
+
+                elif g == 9 and menu == 1 and Pi_Cam != 11:
+                    # SATURATION
+                    if (h == 1 and event.button == 1) or event.button == 4:
+                        saturation +=1
+                        saturation = min(saturation,32)
+                    else:
+                        saturation -=1
+                        saturation = max(saturation,0)
+                    picam2.set_controls({"Saturation": saturation/10})
+                    text(0,9,3,1,1,str(saturation),14,7)
+                    save_config = 1
                     
 # MENU 2 ====================================================================================================
 
@@ -2309,7 +2333,7 @@ while True:
                             
                 # g == 3 USED FOR FOCUS VALUE
                 
-                elif g == 6 and menu == 2:
+                elif g == 6 and menu == 2 and Pi_Cam != 11:
                     # AWB setting
                     if (h == 1 and event.button == 1) or event.button == 4:
                         awb +=1
@@ -2342,7 +2366,7 @@ while True:
                         text(0,8,0,1,1,str(blue)[0:3],14,7)
                     save_config = 1
                     
-                elif g == 7 and menu == 2 and awb == 6:
+                elif g == 7 and menu == 2 and awb == 6 and Pi_Cam != 11:
                     # RED
                     if h == 0 or event.button == 5:
                         red -=0.1
@@ -2355,7 +2379,7 @@ while True:
                     text(0,7,3,1,1,str(red)[0:3],14,7)
                     save_config = 1
                     
-                elif g == 8 and menu == 2  and awb == 6:
+                elif g == 8 and menu == 2  and awb == 6 and Pi_Cam != 11:
                     # BLUE
                     if h == 0 or event.button == 5:
                         blue -=0.1
@@ -2367,19 +2391,7 @@ while True:
                     picam2.set_controls({"ColourGains": cg})
                     text(0,8,3,1,1,str(blue)[0:3],14,7)
                     save_config = 1
-
-                elif g == 17 and menu == 2:
-                    # SATURATION
-                    if (h == 1 and event.button == 1) or event.button == 4:
-                        saturation +=1
-                        saturation = min(saturation,32)
-                    else:
-                        saturation -=1
-                        saturation = max(saturation,0)
-                    picam2.set_controls({"Saturation": saturation/10})
-                    text(0,7,3,1,1,str(saturation),14,7)
-                    save_config = 1
-                    
+                   
                 elif g == 9 and menu == 2:
                     # DENOISE
                     if (h == 1 and event.button == 1) or event.button == 4:
@@ -3360,6 +3372,18 @@ while True:
                     picam2.set_controls({"Sharpness": sharpness1})
                     text(0,8,3,1,1,str(sharpness1),14,7)
                     save_config = 1
+                
+                elif g == 9 and menu == 6 and Pi_Cam != 11:
+                    # SATURATION1
+                    if (h == 1 and event.button == 1) or event.button == 4:
+                        saturation1 +=1
+                        saturation1 = min(saturation1,32)
+                    else:
+                        saturation1 -=1
+                        saturation1 = max(saturation1,0)
+                    picam2.set_controls({"Saturation": saturation1/10})
+                    text(0,9,3,1,1,str(saturation1),14,7)
+                    save_config = 1
                     
 # MENU 7 ====================================================================================================
 
@@ -3520,7 +3544,7 @@ while True:
                             
                 # g == 3 USED FOR FOCUS VALUE
                 
-                elif g == 6 and menu == 7:
+                elif g == 6 and menu == 7 and Pi_Cam != 11:
                     # AWB1 setting
                     if (h == 1 and event.button == 1) or event.button == 4:
                         awb1 +=1
@@ -3553,7 +3577,7 @@ while True:
                         text(0,8,0,1,1,str(blue1)[0:3],14,7)
                     save_config = 1
                     
-                elif g == 7 and menu == 7 and awb1 == 6:
+                elif g == 7 and menu == 7 and awb1 == 6 and Pi_Cam != 11:
                     # RED1
                     if h == 0 or event.button == 5:
                         red1 -=0.1
@@ -3566,7 +3590,7 @@ while True:
                     text(0,7,3,1,1,str(red1)[0:3],14,7)
                     save_config = 1
                     
-                elif g == 8 and menu == 7  and awb1 == 6:
+                elif g == 8 and menu == 7 and awb1 == 6 and Pi_Cam != 11:
                     # BLUE1
                     if h == 0 or event.button == 5:
                         blue1 -=0.1
@@ -3577,18 +3601,6 @@ while True:
                     cg = (red1,blue1)
                     picam2.set_controls({"ColourGains": cg})
                     text(0,8,3,1,1,str(blue1)[0:3],14,7)
-                    save_config = 1
-
-                elif g == 17 and menu == 7:
-                    # SATURATION1
-                    if (h == 1 and event.button == 1) or event.button == 4:
-                        saturation1 +=1
-                        saturation1 = min(saturation1,32)
-                    else:
-                        saturation1 -=1
-                        saturation1 = max(saturation1,0)
-                    picam2.set_controls({"Saturation": saturation1/10})
-                    text(0,7,3,1,1,str(saturation1),14,7)
                     save_config = 1
                    
                 elif g == 9 and menu == 7:
@@ -3759,6 +3771,9 @@ while True:
                         text(0,7,3,1,1,str(meters[meter]),14,7)
                         text(0,8,5,0,1,"Sharpness",14,7)
                         text(0,8,3,1,1,str(sharpness),14,7)
+                        if Pi_Cam != 11:
+                            text(0,9,5,0,1,"Saturation",14,7)
+                            text(0,9,3,1,1,str(saturation),14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
                         # restart circular buffer
                         start_buffer()
@@ -3817,16 +3832,17 @@ while True:
                                     text(0,2,0,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
                                 else:
                                     text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
-                        text(0,6,5,0,1,"AWB",14,7)
-                        text(0,6,3,1,1,str(awbs[awb]),14,7)
-                        text(0,7,5,0,1,"Red",14,7)
-                        text(0,8,5,0,1,"Blue",14,7)
-                        if awb == 6:
-                            text(0,7,3,1,1,str(red)[0:3],14,7)
-                            text(0,8,3,1,1,str(blue)[0:3],14,7)
-                        else:
-                            text(0,7,0,1,1,str(red)[0:3],14,7)
-                            text(0,8,0,1,1,str(blue)[0:3],14,7)
+                        if Pi_Cam != 11:
+                            text(0,6,5,0,1,"AWB",14,7)
+                            text(0,6,3,1,1,str(awbs[awb]),14,7)
+                            text(0,7,5,0,1,"Red",14,7)
+                            text(0,8,5,0,1,"Blue",14,7)
+                            if awb == 6:
+                                text(0,7,3,1,1,str(red)[0:3],14,7)
+                                text(0,8,3,1,1,str(blue)[0:3],14,7)
+                            else:
+                                text(0,7,0,1,1,str(red)[0:3],14,7)
+                                text(0,8,0,1,1,str(blue)[0:3],14,7)
                         text(0,9,5,0,1,"Denoise",14,7)
                         text(0,9,3,1,1,str(denoises[denoise]),14,7)
                         if IRF1 == 0:
@@ -4076,6 +4092,9 @@ while True:
                         text(0,7,3,1,1,str(meters[meter1]),14,7)
                         text(0,8,5,0,1,"Sharpness",14,7)
                         text(0,8,3,1,1,str(sharpness1),14,7)
+                        if Pi_Cam != 11:
+                            text(0,9,5,0,1,"Saturation",14,7)
+                            text(0,9,3,1,1,str(saturation1),14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
                         # restart circular buffer
                         start_buffer()
@@ -4133,16 +4152,17 @@ while True:
                                     text(0,2,0,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
                                 else:
                                     text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
-                        text(0,6,5,0,1,"AWB",14,7)
-                        text(0,6,3,1,1,str(awbs[awb1]),14,7)
-                        text(0,7,5,0,1,"Red",14,7)
-                        text(0,8,5,0,1,"Blue",14,7)
-                        if awb1 == 6:
-                            text(0,7,3,1,1,str(red1)[0:3],14,7)
-                            text(0,8,3,1,1,str(blue1)[0:3],14,7)
-                        else:
-                            text(0,7,0,1,1,str(red1)[0:3],14,7)
-                            text(0,8,0,1,1,str(blue1)[0:3],14,7)
+                        if Pi_Cam != 11:
+                            text(0,6,5,0,1,"AWB",14,7)
+                            text(0,6,3,1,1,str(awbs[awb1]),14,7)
+                            text(0,7,5,0,1,"Red",14,7)
+                            text(0,8,5,0,1,"Blue",14,7)
+                            if awb1 == 6:
+                                text(0,7,3,1,1,str(red1)[0:3],14,7)
+                                text(0,8,3,1,1,str(blue1)[0:3],14,7)
+                            else:
+                                text(0,7,0,1,1,str(red1)[0:3],14,7)
+                                text(0,8,0,1,1,str(blue1)[0:3],14,7)
                         text(0,9,5,0,1,"Denoise",14,7)
                         text(0,9,3,1,1,str(denoises[denoise1]),14,7)
                         if IRF1 == 0:
