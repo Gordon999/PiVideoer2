@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "0.39"
+version = "1.02"
 
 import time
 import cv2
@@ -503,7 +503,7 @@ if threshold == 0:
         v_length = (interval - 1) * 1000
 
 def Camera_Version():
-  global lores_width,lores_height,vid_width,vid_height,old_vf,bw,Pi_Cam,cam0,cam1,camera,camids,max_gain,max_vf,max_vfs
+  global lores_width,lores_height,vid_width,vid_height,old_vf,bw,Pi_Cam,cam1,cam2,camera,camids,max_gain,max_vf,max_vfs
   global a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,pre_width,scr_width,scr_height,scientif
   if os.path.exists('libcams.txt'):
       os.rename('libcams.txt', 'oldlibcams.txt')
@@ -516,44 +516,58 @@ def Camera_Version():
     while line:
         camstxt.append(line.strip())
         line = file.readline()
-  cam0 = "0"
-  cam1 = "1"
-  cwidth = scr_width - bw
-  cheight = scr_height
+  cam1     = "0"
+  cam2     = "1"
+  vwidths  = []
+  vheights = []
+  cwidth   = scr_width - bw
+  cheight  = scr_height
   for x in range(0,len(camstxt)):
     # Determine both cameras 
     if camstxt[x][0:4] == "0 : ":
-        cam0 = camstxt[x][4:10]
-    if camstxt[x][0:4] == "1 : ":
         cam1 = camstxt[x][4:10]
+    if camstxt[x][0:4] == "1 : ":
+        cam2 = camstxt[x][4:10]
+    if cam1 != "0" and cam2 == "1" and camera == 0:
+        forms = camstxt[x].split(" ")
+        for q in range(0,len(forms)):
+           if "x" in forms[q] and "/" not in forms[q] and "m" not in forms[q] and "[" not in forms[q]:
+              qwidth,qheight = forms[q].split("x")
+              vwidths.append(int(qwidth))
+              vheights.append(int(qheight))
+    elif cam1 != "0" and cam2 != "1" and camera == 1:
+        forms = camstxt[x].split(" ")
+        for q in range(0,len(forms)):
+           if "x" in forms[q] and "/" not in forms[q] and "m" not in forms[q] and "[" not in forms[q]:
+              qwidth,qheight = forms[q].split("x")
+              vwidths.append(int(qwidth))
+              vheights.append(int(qheight))
+              
+  swidths[0]  = vwidths[-1]
+  sheights[0] = vheights[-1]
+  
   Pi_Cam = -1
   for x in range(0,len(camids)):
      if camera == 0:
-        if cam0 == camids[x]:
+        if cam1 == camids[x]:
             Pi_Cam = x
      elif camera == 1:
-        if cam1 == camids[x]:
+        if cam2 == camids[x]:
             Pi_Cam = x
   max_gain = max_gains[Pi_Cam]
   if a > pre_width - v_crop:
       a = int(pre_width/2)
   if b > pre_height - h_crop:
       b = int(pre_height/2)
-  swidth = swidths[Pi_Cam]
+  swidth  = swidths[Pi_Cam]
   sheight = sheights[Pi_Cam]
   # set video size
-  if Pi_Cam == 7:
-      vid_width  = 1456
-      vid_height = 1088
+  if swidth < 1920:
+      vid_width  = swidth
+      vid_height = sheight
       # set lores size
-      lores_width  = 1456
-      lores_height = 1088
-  elif Pi_Cam == 11:
-      vid_width  = 1280
-      vid_height = 800
-      # set lores size
-      lores_width  = 1280
-      lores_height = 800
+      lores_width  = swidth
+      lores_height = sheight
   else:
       vid_width  = 1920
       vid_height = 1080
@@ -562,17 +576,17 @@ def Camera_Version():
       lores_height = 960
   if Pi_Cam != -1:
       print("Camera:",cameras[Pi_Cam])
-  elif cam0 != "0" and camera == 0:
-      Pi_Cam      = 0
-      cameras[0]  = cam0
-      camids[0]   = cam0[0:6]
-      print("Camera:",cameras[Pi_Cam])
-      max_gain    = max_gains[Pi_Cam]
-      mag         = int(max_gain/4)
-  elif cam1 != "1" and camera == 1:
+  elif cam1 != "0" and camera == 0:
       Pi_Cam      = 0
       cameras[0]  = cam1
       camids[0]   = cam1[0:6]
+      print("Camera:",cameras[Pi_Cam])
+      max_gain    = max_gains[Pi_Cam]
+      mag         = int(max_gain/4)
+  elif cam2 != "1" and camera == 1:
+      Pi_Cam      = 0
+      cameras[0]  = cam2
+      camids[0]   = cam2[0:6]
       print("Camera:",cameras[Pi_Cam])
       max_gain    = max_gains[Pi_Cam]
       mag         = int(max_gain/4)
@@ -584,7 +598,7 @@ def Camera_Version():
 Camera_Version()
 suntimes()
 
-print(Pi_Cam,cam0,cam1)
+print(Pi_Cam,cam1,cam2)
 
 # mp4_annotation parameters
 colour = (255, 255, 255)
