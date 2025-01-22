@@ -453,9 +453,9 @@ def suntimes():
         of_mins = int(time2a[1])
         on_time = (on_hour * 60) + on_mins
         of_time = (of_hour * 60) + of_mins
-        if menu == 3 and cam1 != "2":
+        if menu == 3 and cam2 != "1":
             text(0,5,1,0,1,"SW 2>1 time",14,7)
-            if synced == 1 and cam1 != "2":
+            if synced == 1 and cam2 != "1":
                 if on_mins > 9:
                     text(0,5,2,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                 else:
@@ -466,7 +466,7 @@ def suntimes():
                 else:
                     text(0,5,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
             text(0,6,1,0,1,"SW 1>2 time",14,7)
-            if synced == 1 and cam1 != "2":
+            if synced == 1 and cam2 != "1":
                 if of_mins > 9:
                     text(0,6,2,1,1,str(of_hour) + ":" + str(of_mins),14,7)
                 else:
@@ -982,12 +982,12 @@ def main_menu():
     text(0,1,6,0,1,"RECORD",16,3)
     text(0,2,1,0,1,"DETECTION",14,7)
     text(0,2,1,1,1,"Settings",14,7)
-    if cam1 != "2":
+    if cam2 != "1":
         text(0,3,1,0,1,"CAMERA 1",14,7)
     else:
         text(0,3,1,0,1,"CAMERA ",14,7)
     text(0,3,1,1,1,"Settings 1",14,7)
-    if cam1 != "2":
+    if cam2 != "1":
         text(0,4,1,0,1,"CAMERA 1",14,7)
     else:
         text(0,4,1,0,1,"CAMERA ",14,7)
@@ -1002,7 +1002,7 @@ def main_menu():
     else:
         text(0,6,0,0,1,"SHOW or",13,7)
         text(0,6,0,1,1,"DELETE",13,7)
-    if Pi == 5 and cam1 != "2":
+    if Pi == 5 and cam2 != "1":
         text(0,8,1,0,1,"CAMERA 2",14,7)
         text(0,8,1,1,1,"Settings 1",14,7)
         text(0,9,1,0,1,"CAMERA 2",14,7)
@@ -1142,7 +1142,7 @@ while True:
         suntimes()
         
         # switch cameras if switch time reached and clocked synced
-        if camera_sw <= 1 and cam1 != "2": # AUTO (Sun) or SET TIMES - switch cameras on set times
+        if camera_sw <= 1 and cam2 != "1": # AUTO (Sun) or SET TIMES - switch cameras on set times
           if synced == 1 and on_time < of_time and menu != 1 and menu != 2 and menu != 6 and menu != 7:
               if ((hour* 60) + mins >= on_time and (hour* 60) + mins < of_time) and camera == 1:
                     camera = 0
@@ -1786,7 +1786,6 @@ while True:
                     pygame.image.save(nmask,h_user + '/CMask.bmp')
                  
             # set AF camera autofocus position
-            print(mousex, pre_width, zoom,menu,Pi_Cam,AF_f_mode, event.button)
             if mousex < pre_width and zoom == 0 and (menu == 2 or menu == 7) and (Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6) and AF_f_mode > 0 and event.button != 3:
                 a = mousex
                 b = mousey
@@ -2474,7 +2473,7 @@ while True:
                     
 # MENU 3 ====================================================================================================
                     
-                elif g == 4 and menu == 3 and Pi == 5 and cam1 != "2":
+                elif g == 4 and menu == 3 and Pi == 5 and cam2 != "1":
                     # SWITCH CAMERA MODE
                     if (h == 1 and event.button == 1) or event.button == 4:
                         camera_sw +=1
@@ -2509,7 +2508,7 @@ while True:
                             set_parameters1()
                     if camera_sw == 0:
                       suntimes()
-                      if synced == 1 and cam1 != "2":
+                      if synced == 1 and cam2 != "1":
                         if on_mins > 9:
                             text(0,5,clr,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                         else:
@@ -2519,7 +2518,7 @@ while True:
                             text(0,5,0,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                         else:
                             text(0,5,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
-                      if synced == 1 and cam1 != "2":
+                      if synced == 1 and cam2 != "1":
                         if of_mins > 9:
                             text(0,6,clr,1,1,str(of_hour) + ":" + str(of_mins),14,7)
                         else:
@@ -3886,7 +3885,7 @@ while True:
                         else:
                             button(0,3,1)
                             text(0,3,1,0,1,"Zoom",14,0)
-                        if Pi == 5:
+                        if Pi == 5 and cam2 != "1":
                             text(0,4,1,0,1,"Camera: " + str(camera + 1),14,7)
                             text(0,4,3,1,1,camera_sws[camera_sw],14,7)
                         text(0,1,2,0,1,"V Length S (F)",14,7)
@@ -3895,13 +3894,13 @@ while True:
                         text(0,2,3,1,1,str(pre_frames) + " Secs",14,7)
                         text(0,0,2,0,1,"Interval S",14,7)
                         text(0,0,3,1,1,str(interval),14,7)
-                        if cam1 != "2":
+                        if cam2 != "1":
                             if camera_sw == 0:
                                 clr = 2
                             else:
                                 clr = 3
                             text(0,5,1,0,1,"SW 2>1 time",14,7)
-                            if synced == 1 and cam1 != "2":
+                            if synced == 1 and cam2 != "1":
                                 if on_mins > 9:
                                     text(0,5,clr,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                                 else:
@@ -3912,7 +3911,7 @@ while True:
                                 else:
                                     text(0,5,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
                             text(0,6,1,0,1,"SW 1>2 time",14,7)
-                            if synced == 1 and cam1 != "2":
+                            if synced == 1 and cam2 != "1":
                                 if of_mins > 9:
                                     text(0,6,clr,1,1,str(of_hour) + ":" + str(of_mins),14,7)
                                 else:
@@ -4056,7 +4055,7 @@ while True:
                             USB_storage = ((1 - (usedusb.f_bavail / usedusb.f_blocks)) * 100)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
 
-                    if g == 8 and cam1 != "2":
+                    if g == 8 and cam2 != "1":
                         # camera 2 settings 1
                         menu = 6
                         menu_timer  = time.monotonic()
@@ -4115,7 +4114,7 @@ while True:
                         start_buffer()
                         set_parameters1()
 
-                    if g == 9 and cam1 != "2":
+                    if g == 9 and cam2 != "1":
                         # camera 2 settings 2
                         menu = 7
                         menu_timer  = time.monotonic()
@@ -4146,7 +4145,7 @@ while True:
                                 clr = 2
                             else:
                                 clr = 3
-                            if synced == 1 and cam1 != "2":
+                            if synced == 1 and cam2 != "1":
                                 if ir_on_mins > 9:
                                     text(0,1,clr,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
                                 else:
@@ -4157,7 +4156,7 @@ while True:
                                 else:
                                     text(0,1,0,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
                             text(0,2,1,0,1,"IRF OFF time",14,7)
-                            if synced == 1 and cam1 != "2":
+                            if synced == 1 and cam2 != "1":
                                 if ir_of_mins > 9:
                                     text(0,2,clr,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
                                 else:
