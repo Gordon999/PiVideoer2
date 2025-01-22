@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.02"
+version = "1.03"
 
 import time
 import cv2
@@ -503,7 +503,7 @@ if threshold == 0:
         v_length = (interval - 1) * 1000
 
 def Camera_Version():
-  global lores_width,lores_height,vid_width,vid_height,old_vf,bw,Pi_Cam,cam1,cam2,camera,camids,max_gain,max_vf,max_vfs
+  global lores_width,lores_height,vid_width,vid_height,old_vf,bw,Pi_Cam,cam1,cam2,camera,camids,max_gain,max_vf,max_vfs,swidth,sheight
   global a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,pre_width,scr_width,scr_height,scientif
   if os.path.exists('libcams.txt'):
       os.rename('libcams.txt', 'oldlibcams.txt')
@@ -1785,8 +1785,9 @@ while True:
                     nmask = pygame.transform.flip(nmask, True, False)
                     pygame.image.save(nmask,h_user + '/CMask.bmp')
                  
-            # set AF camera autofocus position 
-            if mousex < pre_width and zoom == 0 and menu == 3 and (Pi_Cam == 3 or Pi_Cam == 8) and AF_f_mode > 0 and event.button != 3:
+            # set AF camera autofocus position
+            print(mousex, pre_width, zoom,menu,Pi_Cam,AF_f_mode, event.button)
+            if mousex < pre_width and zoom == 0 and (menu == 2 or menu == 7) and (Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6) and AF_f_mode > 0 and event.button != 3:
                 a = mousex
                 b = mousey
                 if a + h_crop > pre_width:
@@ -1802,7 +1803,7 @@ while True:
                 fxz = int((h_crop * 2) * (swidth/pre_width))
                 fxa = int((v_crop * 2) * (sheight/pre_height))
                 picam2.set_controls({"AfMode" : controls.AfModeEnum.Continuous,"AfMetering" : controls.AfMeteringEnum.Windows,"AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
-                text(0,0,3,1,1,"Spot",14,7)
+                text(0,4,3,1,1,"Spot",14,7)
                 oldimg = []
                 save_config = 1
             # keys   
