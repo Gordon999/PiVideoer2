@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.03"
+version = "1.05"
 
 import time
 import cv2
@@ -121,9 +121,14 @@ sharpness     = 4       # sharpness *
 saturation    = 10      # saturation *
 fps           = 25      # camera fps
 AF_f_mode     = 1       # AF camera focus mode *
+AF_f_spot     = 0
 AF_focus      = 1       # AF camera manual focus default *
 IRF           = 0       # Waveshare IR Filter switch MODE *
-IRF1          = 0       # Waveshare IR Filter switch ON/OFF *
+IRF_on       = 0       # Waveshare IR Filter switch ON/OFF *
+ir_on_hour    = 9       # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
+ir_of_hour    = 10      # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
+ir_on_mins    = 0       # Switch IR Filter ON mins, 0 - 59 *
+ir_of_mins    = 0       # Switch IR Filter OFF mins, 0 - 59 *
 # setup for 2nd camera (Pi5 ONLY)
 mode1         = 1       # set camera mode *
 speed1        = 18      # set manual shutter , in shutters list *
@@ -141,7 +146,14 @@ sharpness1    = 4       # sharpness *
 saturation1   = 10      # saturation *
 fps1          = 25      # camera fps *
 AF_f_mode1    = 1       # AF camera focus mode *
+AF_f_spot1    = 1
 AF_focus1     = 1       # AF camera manual focus default *
+IRF1          = 0       # Waveshare IR Filter switch MODE *
+IRF_on1       = 0       # Waveshare IR Filter switch ON/OFF *
+ir_on_hour1   = 9       # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
+ir_of_hour1   = 10      # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
+ir_on_mins1   = 0       # Switch IR Filter ON mins, 0 - 59 *
+ir_of_mins1   = 0       # Switch IR Filter OFF mins, 0 - 59 *
 #===========================================================================================
 Capture       = 1       # CAPTURE AT BOOT , 0 = off, 1 = ON *
 preview       = 0       # show detected changed pixels *
@@ -159,10 +171,6 @@ on_hour       = 12      # Switch Camera 1-2 Hour, 1 - 23, 0 will NOT SWITCH *
 of_hour       = 14      # Switch Camera 2-1 Hour, 1 - 23, 0 will NOT SWITCH *
 on_mins       = 12      # Switch Camera 1-2 mins, 0 - 59 *
 of_mins       = 14      # Switch Camera 2-1 mins, 0 - 59 *
-ir_on_hour    = 9       # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
-ir_of_hour    = 10      # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
-ir_on_mins    = 0       # Switch IR Filter ON mins, 0 - 59 *
-ir_of_mins    = 0       # Switch IR Filter OFF mins, 0 - 59 *
 m_alpha       = 130     # MASK ALPHA *
 sync_time     = 120     # time sync check time in seconds *
 camera        = 0       # camera in use *
@@ -171,7 +179,7 @@ camera_sw     = 0       # camera switch mode *
 # * adjustable whilst running
 
 # initialise parameters
-config_file   = "PiVideoconfig033.txt"
+config_file   = "PiVideoconfig035.txt"
 old_camera    = camera
 old_camera_sw = camera_sw
 synced        = 0
@@ -287,8 +295,8 @@ if not os.path.exists(config_file):
               interval,v_crop,v_length,ev,meter,ES,a,b,sharpness,saturation,denoise,fan_low,fan_high,det_high,quality,
               check_time,sd_hour,vformat,threshold2,col_filter,nr,pre_frames,auto_time,ram_limit,mp4_fps,mp4_anno,SD_F_Act,dspeed,IRF,camera,
               mode1,speed1,gain1,brightness1,contrast1,awb1,int(red1*10),int(blue1*10),meter1,ev1,denoise1,quality1,sharpness1,saturation1,
-              fps1,AF_f_mode1,AF_focus1,AF_f_mode,AF_focus,IRF1,on_hour,of_hour,on_mins,of_mins,ir_on_hour,ir_of_hour,ir_on_mins,ir_of_mins,
-              camera_sw]
+              fps1,AF_f_mode1,AF_focus1,AF_f_mode,AF_focus,IRF_on,on_hour,of_hour,on_mins,of_mins,ir_on_hour,ir_of_hour,ir_on_mins,ir_of_mins,
+              camera_sw,AF_f_spot,AF_f_spot1,ir_on_hour1,ir_of_hour1,ir_on_mins1,ir_of_mins1,IRF1,IRF_on1]
     with open(config_file, 'w') as f:
         for item in defaults:
             f.write("%s\n" % item)
@@ -365,7 +373,7 @@ AF_f_mode1  = config[59]
 AF_focus1   = config[60]
 AF_f_mode   = config[61]
 AF_focus    = config[62]
-IRF1        = config[63]
+IRF_on        = config[63]
 on_hour     = config[64]
 of_hour     = config[65]
 on_mins     = config[66]
@@ -375,17 +383,28 @@ ir_of_hour  = config[69]
 ir_on_mins  = config[70]
 ir_of_mins  = config[71]
 camera_sw   = config[72]
+AF_f_spot   = config[73]
+AF_f_spot1  = config[74]
+ir_on_hour1 = config[75]
+ir_of_hour1 = config[76]
+ir_on_mins1 = config[77]
+ir_of_mins1 = config[78]
+IRF1        = config[79]
+IRF_on1     = config[80]
 
-on_time    = (on_hour * 60) + on_mins
-of_time    = (of_hour * 60) + of_mins
-ir_on_time = (ir_on_hour * 60) + ir_on_mins
-ir_of_time = (ir_of_hour * 60) + ir_of_mins
+on_time     = (on_hour * 60) + on_mins
+of_time     = (of_hour * 60) + of_mins
+ir_on_time  = (ir_on_hour * 60) + ir_on_mins
+ir_of_time  = (ir_of_hour * 60) + ir_of_mins
+ir_on_time1 = (ir_on_hour1 * 60) + ir_on_mins1
+ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
 
 
 
 def suntimes():
     global sr_seconds,ss_seconds,now_seconds,ir_on_hour,ir_on_mins,ir_of_hour,ir_of_mins,menu,synced,Pi_Cam
-    global on_hour,on_mins,of_hour,of_mins,camera_sw,on_time,of_time,IRF,ir_on_time,ir_of_time
+    global on_hour,on_mins,of_hour,of_mins,camera_sw,on_time,of_time,IRF,IRF1,ir_on_time,ir_of_time,ir_on_time1,ir_of_time1
+    global ir_on_hour1,ir_on_mins1,ir_of_hour1,ir_of_mins1
     sun = ephem.Sun()
     r1 = str(somewhere.next_rising(sun))
     sunrise = datetime.datetime.strptime(str(r1), '%Y/%m/%d %H:%M:%S')
@@ -414,10 +433,10 @@ def suntimes():
             ir_of_hour -= 24
         if ir_of_hour < 0:
             ir_of_hour += 24
-        ir_of_mins = int(time2a[1])
-        ir_on_time = (ir_on_hour * 60) + ir_on_mins
-        ir_of_time = (ir_of_hour * 60) + ir_of_mins
-        if Pi_Cam == 9 and (menu == 2 or menu ==7):
+        ir_of_mins  = int(time2a[1])
+        ir_on_time  = (ir_on_hour * 60) + ir_on_mins
+        ir_of_time  = (ir_of_hour * 60) + ir_of_mins
+        if menu == 2:
           if synced == 1:
             if ir_on_mins > 9:
                 text(0,1,2,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
@@ -434,10 +453,48 @@ def suntimes():
             else:
                 text(0,2,2,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
           else:
-            if ir1_of_mins > 9:
+            if ir_of_mins > 9:
                 text(0,2,0,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
             else:
                 text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+
+    if IRF1 == 0:
+        ir_on_hour1 = int(time1a[0]) + UTC_offset
+        if ir_on_hour1 > 23:
+            ir_on_hour1 -= 24
+        if ir_on_hour1 < 0:
+            ir_on_hour1 += 24
+        ir_on_mins1 = int(time1a[1])
+        ir_of_hour1 = int(time2a[0]) + UTC_offset
+        if ir_of_hour1 > 23:
+            ir_of_hour1 -= 24
+        if ir_of_hour1 < 0:
+            ir_of_hour1 += 24
+        ir_of_mins1  = int(time2a[1])
+        ir_on_time1 = (ir_on_hour1 * 60) + ir_on_mins1
+        ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
+        if menu == 7:
+          if synced == 1:
+            if ir_on_mins1 > 9:
+                text(0,1,2,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
+            else:
+                text(0,1,2,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
+          else:
+            if ir_on_mins1 > 9:
+                text(0,1,0,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
+            else:
+                text(0,1,0,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
+          if synced == 1 :
+            if ir_of_mins1 > 9:
+                text(0,2,2,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
+            else:
+                text(0,2,2,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
+          else:
+            if ir_of_mins1 > 9:
+                text(0,2,0,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
+            else:
+                text(0,2,0,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
+                
     if camera_sw == 0:
         on_hour = int(time1a[0]) + UTC_offset
         if on_hour > 23:
@@ -689,7 +746,8 @@ def start_buffer():
 start_buffer()
 
 def set_parameters():
-    global mode,sspeed,picam2,awb,AF_f_mode,brightness,contrast,gain,ev,meter,saturation,sharpness,denoise,fps,use_gpio,IRF,IRF1,led_sw_ir,led_sw_ir1
+    global mode,sspeed,picam2,awb,AF_f_mode,brightness,contrast,gain,ev,meter,saturation,sharpness,denoise,fps,use_gpio,IRF,IRF_on,led_sw_ir,led_sw_ir1
+    global a,b,h_crop,v_crop,swidth,sheight,fxx,fxy,fxz,fxa,AF_f_spot
     # setup camera parameters
     if mode == 0:
         picam2.set_controls({"AeEnable": False,"ExposureTime": sspeed})
@@ -723,11 +781,28 @@ def set_parameters():
             picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
             picam2.set_controls({"LensPosition": AF_focus})
         elif AF_f_mode == 1:
-            picam2.set_controls({"AfMode": controls.AfModeEnum.Auto, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
-            picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+            if AF_f_spot == 0:
+                picam2.set_controls({"AfMode": controls.AfModeEnum.Auto, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
+                picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+            else:
+                fxx = int((a - h_crop) * (swidth/pre_width))
+                fxy = int((b - v_crop) * (sheight/pre_height))
+                fxz = int((h_crop * 2) * (swidth/pre_width))
+                fxa = int((v_crop * 2) * (sheight/pre_height))
+                picam2.set_controls({"AfMode" : controls.AfModeEnum.Auto,"AfMetering" : controls.AfMeteringEnum.Windows,"AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
+                picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+
         elif AF_f_mode == 2:
-            picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
-            picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+            if AF_f_spot == 0:
+                picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
+                picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+            else:
+                fxx = int((a - h_crop) * (swidth/pre_width))
+                fxy = int((b - v_crop) * (sheight/pre_height))
+                fxz = int((h_crop * 2) * (swidth/pre_width))
+                fxa = int((v_crop * 2) * (sheight/pre_height))
+                picam2.set_controls({"AfMode" : controls.AfModeEnum.Continuous,"AfMetering" : controls.AfMeteringEnum.Windows,"AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
+                picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
     picam2.set_controls({"Brightness": brightness/10})
     picam2.set_controls({"Contrast": contrast/10})
     picam2.set_controls({"ExposureValue": ev/10})
@@ -749,15 +824,16 @@ def set_parameters():
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
     picam2.set_controls({"FrameRate": fps})
     if use_gpio == 1:
-        if IRF1 == 0 and IRF == 2:
+        if IRF_on == 0 and IRF == 2:
             led_sw_ir.off()
             led_sw_ir1.off()
-        elif IRF1 == 1 and IRF == 3:
+        elif IRF_on == 1 and IRF == 3:
             led_sw_ir1.on()
             led_sw_ir.on()
 
 def set_parameters1():
-    global mode1,sspeed1,picam2,awb1,AF_f_mode1,AF_focus1,AF_focus1,brightness1,contrast1,gain1,ev1,meter1,saturation1,sharpness1,denoise1,fps1,use_gpio,IRF1,IRF,led_sw_ir,led_sw_ir1
+    global mode1,sspeed1,picam2,awb1,AF_f_mode1,AF_focus1,AF_focus1,brightness1,contrast1,gain1,ev1,meter1,saturation1,sharpness1,denoise1,fps1,use_gpio,IRF_on,IRF
+    global led_sw_ir,led_sw_ir1,a,b,h_crop,v_crop,swidth,sheight,fxx,fxy,fxz,fxa,AF_f_spot1
     # setup camera1 parameters
     time.sleep(1)
     if mode1 == 0:
@@ -791,11 +867,28 @@ def set_parameters1():
             picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
             picam2.set_controls({"LensPosition": AF_focus1})
         elif AF_f_mode1 == 1:
-            picam2.set_controls({"AfMode": controls.AfModeEnum.Auto, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
-            picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+            if AF_f_spot1 == 0:
+                picam2.set_controls({"AfMode": controls.AfModeEnum.Auto, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
+                picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+            else:
+                fxx = int((a - h_crop) * (swidth/pre_width))
+                fxy = int((b - v_crop) * (sheight/pre_height))
+                fxz = int((h_crop * 2) * (swidth/pre_width))
+                fxa = int((v_crop * 2) * (sheight/pre_height))
+                picam2.set_controls({"AfMode" : controls.AfModeEnum.Auto,"AfMetering" : controls.AfMeteringEnum.Windows,"AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
+                picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
         elif AF_f_mode1 == 2:
-            picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
-            picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+            if AF_f_spot1 == 0:
+                picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
+                picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+            else:
+                fxx = int((a - h_crop) * (swidth/pre_width))
+                fxy = int((b - v_crop) * (sheight/pre_height))
+                fxz = int((h_crop * 2) * (swidth/pre_width))
+                fxa = int((v_crop * 2) * (sheight/pre_height))
+                picam2.set_controls({"AfMode" : controls.AfModeEnum.Continuous,"AfMetering" : controls.AfMeteringEnum.Windows,"AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
+                picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
+
     picam2.set_controls({"Brightness": brightness1/10})
     picam2.set_controls({"Contrast": contrast1/10})
     picam2.set_controls({"ExposureValue": ev1/10})
@@ -817,10 +910,10 @@ def set_parameters1():
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
     picam2.set_controls({"FrameRate": fps1})
     if use_gpio == 1:
-        if IRF1 == 0 and IRF == 2:
+        if IRF_on == 0 and IRF == 2:
             led_sw_ir.off()
             led_sw_ir1.off()
-        elif IRF1 == 1 and IRF == 3:
+        elif IRF_on == 1 and IRF == 3:
             led_sw_ir1.on()
             led_sw_ir.on()
 
@@ -992,7 +1085,10 @@ def main_menu():
     else:
         text(0,4,1,0,1,"CAMERA ",14,7)
     text(0,4,1,1,1,"Settings 2",14,7)
-    text(0,5,1,0,1,"VIDEO",14,7)
+    if Pi == 5 and cam2 != "1":
+        text(0,5,1,0,1,"VIDEO & SW",14,7)
+    else:
+        text(0,5,1,0,1,"VIDEO     ",14,7)
     text(0,5,1,1,1,"Settings",14,7)
     text(0,7,1,0,1,"OTHER",14,7)
     text(0,7,1,1,1,"Settings ",14,7)
@@ -1146,7 +1242,7 @@ while True:
           if synced == 1 and on_time < of_time and menu != 1 and menu != 2 and menu != 6 and menu != 7:
               if ((hour* 60) + mins >= on_time and (hour* 60) + mins < of_time) and camera == 1:
                     camera = 0
-                    if IRF1 == 0:
+                    if IRF_on == 1 and IRF_on1 == 1:
                         led_ir_light.off()
                     old_camera = camera
                     if menu == 3:
@@ -1182,39 +1278,66 @@ while True:
                     else:
                         set_parameters1()
               save_config = 1
-            
 
-        # switch IR filters / Light / RECORD if switch time reached and clocked synced
-        if IRF <= 1: # AUTO (Sun) or SET TIMES - switch IR filter / Light / RECORD at set times
+        # switch IR filter / Light / RECORD if switch time reached and clocked synced
+        if IRF <= 1 and camera == 0: # AUTO (Sun) or SET TIMES - switch IR filter / Light / RECORD at set times
             if synced == 1 and ir_on_time < ir_of_time:
                 if (hour* 60) + mins >= ir_on_time and (hour* 60) + mins < ir_of_time:
-                    # daytime switch IR filters ON and light OFF
-                    IRF1 = 1
+                    # daytime switch IR filter ON and light OFF
+                    IRF_on = 1
                     stop_rec = 0
                     led_sw_ir.on()
-                    led_sw_ir1.on()
+                    led_sw_ir1.off()
                     led_ir_light.off()
-                    if menu == 2 or menu == 7:
+                    if menu == 2 :
                         text(0,0,1,0,1,"IR Filter",14,7)
                  
                 elif ((hour* 60) + mins >= ir_of_time or (hour* 60) + mins < ir_on_time):
                     if rec_stop == 1: # night time, stop recording, all IR Filters and Light OFF
                         now = datetime.datetime.now()
                         timestamp = now.strftime("%y%m%d%H%M%S")
-                        IRF1 = 0
+                        IRF_on = 0
                         led_sw_ir.off()
+                        led_ir_light.off()
+                        stop_rec = 1
+                        if menu == 2 :
+                            text(0,0,2,0,1,"IR Filter",14,7)
+                    else: # night time switch IR filters OFF and light ON
+                        IRF_on = 0
+                        stop_rec = 0
+                        led_sw_ir.off()
+                        led_ir_light.on()
+                        if menu == 2 :
+                            text(0,0,2,0,1,"IR Filter",14,7)
+
+        # switch IR filter1 / Light / RECORD if switch time reached and clocked synced
+        if IRF1 <= 1 and camera == 1: # AUTO (Sun) or SET TIMES - switch IR filter / Light / RECORD at set times
+            if synced == 1 and ir_on_time1 < ir_of_time1:
+                if (hour* 60) + mins >= ir_on_time1 and (hour* 60) + mins < ir_of_time1:
+                    # daytime switch IR filter ON and light OFF
+                    IRF_on1 = 1
+                    stop_rec = 0
+                    led_sw_ir1.on()
+                    led_sw_ir.off()
+                    led_ir_light.off()
+                    if menu == 7:
+                        text(0,0,1,0,1,"IR Filter",14,7)
+                elif ((hour* 60) + mins >= ir_of_time1 or (hour* 60) + mins < ir_on_time1):
+                    if rec_stop == 1: # night time, stop recording, all IR Filters and Light OFF
+                        now = datetime.datetime.now()
+                        timestamp = now.strftime("%y%m%d%H%M%S")
+                        IRF_on1 = 0
                         led_sw_ir1.off()
                         led_ir_light.off()
                         stop_rec = 1
-                        if menu == 2 or menu == 7:
+                        if menu == 7:
                             text(0,0,2,0,1,"IR Filter",14,7)
                     else: # night time switch IR filters OFF and light ON
-                        IRF1 = 0
+                        IRF_on1 = 0
                         stop_rec = 0
-                        led_sw_ir.off()
                         led_sw_ir1.off()
                         led_ir_light.on()
-                        if menu == 2 or menu == 7:
+                        if menu == 7:
                             text(0,0,2,0,1,"IR Filter",14,7)
           
         # shutdown if shutdown hour reached and clocked synced
@@ -1803,6 +1926,10 @@ while True:
                 fxa = int((v_crop * 2) * (sheight/pre_height))
                 picam2.set_controls({"AfMode" : controls.AfModeEnum.Continuous,"AfMetering" : controls.AfMeteringEnum.Windows,"AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
                 text(0,4,3,1,1,"Spot",14,7)
+                if camera == 0:
+                    AF_f_spot = 1
+                else:
+                    AF_f_spot1 = 1
                 oldimg = []
                 save_config = 1
             # keys   
@@ -2294,11 +2421,23 @@ while True:
                         AF_f_mode +=1
                         AF_f_mode = min(AF_f_mode,2)
                     if AF_f_mode == 0:
+                        AF_f_spot = 0
+                        fxx = 0
+                        fxy = 0
+                        fxz = 1
                         picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
                     elif AF_f_mode == 1:
+                        AF_f_spot = 0
+                        fxx = 0
+                        fxy = 0
+                        fxz = 1
                         picam2.set_controls({"AfMode": controls.AfModeEnum.Auto, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
                         picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
                     elif AF_f_mode == 2:
+                        AF_f_spot = 0
+                        fxx = 0
+                        fxy = 0
+                        fxz = 1
                         picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
                         picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
                     text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
@@ -2357,17 +2496,17 @@ while True:
                         awb = max(awb,0)
                     if awb == 0:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Auto})
-                    elif awb == 1:
+                    elif awb == 1 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Tungsten})
-                    elif awb == 2:
+                    elif awb == 2 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Fluorescent})
-                    elif awb == 3:
+                    elif awb == 3 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Indoor})
-                    elif awb == 4:
+                    elif awb == 4 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Daylight})
-                    elif awb == 5:
+                    elif awb == 5 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Cloudy})
-                    elif awb == 6:
+                    elif awb == 6 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Custom})
                         cg = (red,blue)
                         picam2.set_controls({"AwbEnable": False,"ColourGains": cg})
@@ -2434,16 +2573,15 @@ while True:
                         IRF = max(IRF,0)
                     text(0,0,3,1,1,IR_filters[IRF],14,7)
                     if IRF == 2:
-                        IRF1 = 0
+                        IRF_on = 0
                         led_sw_ir.off()
-                        led_sw_ir1.off()
                         led_ir_light.on()
                         text(0,0,2,0,1,"IR Filter",14,7)
                     elif IRF == 3:
-                        IRF1 = 1
+                        IRF_on = 1
                         led_sw_ir.on()
-                        led_sw_ir1.on()
-                        led_ir_light.off()
+                        if IRF_on1 == 1:
+                            led_ir_light.off()
                         text(0,0,1,0,1,"IR Filter",14,7)
 
                     if IRF == 0:
@@ -2486,7 +2624,7 @@ while True:
                     old_camera_sw = camera_sw
                     if camera_sw == 2:
                         camera = 0
-                        if IRF1 == 0:
+                        if IRF_on == 1:
                             led_ir_light.off()
                         text(0,4,1,0,1,"Camera: " + str(camera + 1),14,7)
                     elif camera_sw == 3:
@@ -3401,99 +3539,99 @@ while True:
                     
 # MENU 7 ====================================================================================================
 
-                elif g == 1 and menu == 7 and IRF == 1:
+                elif g == 1 and menu == 7 and IRF1 == 1:
                     # SWITCH IR1 FILTER ON TIME
                     if h == 1 and event.button == 3:
-                        ir_on_hour +=1
-                        if ir_on_hour > 23:
-                            ir_on_hour = 0
+                        ir_on_hour1 +=1
+                        if ir_on_hour1 > 23:
+                            ir_on_hour1 = 0
 
                     elif h == 0 and event.button == 3:
-                        ir_on_hour -=1
-                        if ir_on_hour < 0:
-                            ir_on_hour = 23
+                        ir_on_hour1 -=1
+                        if ir_on_hour1 < 0:
+                            ir_on_hour1 = 23
                             
                     elif h == 1:
-                        ir_on_mins +=1
-                        if ir_on_mins > 59:
-                            ir_on_mins = 0
-                            ir_on_hour += 1
-                            if ir_on_hour > 23:
-                                ir_on_hour = 0
+                        ir_on_mins1 +=1
+                        if ir_on_mins1 > 59:
+                            ir_on_mins1 = 0
+                            ir_on_hour1 += 1
+                            if ir_on_hour1 > 23:
+                                ir_on_hour1 = 0
                     elif h == 0:
-                        ir_on_mins -=1
-                        if ir_on_mins  < 0:
-                            ir_on_hour -= 1
-                            ir_on_mins = 59
-                            if ir_on_hour < 0:
-                                ir_on_hour = 23
-                    if ir_on_mins > 9:
-                        text(0,1,3,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                        ir_on_mins1 -=1
+                        if ir_on_mins1  < 0:
+                            ir_on_hour1 -= 1
+                            ir_on_mins1 = 59
+                            if ir_on_hour1 < 0:
+                                ir_on_hour1 = 23
+                    if ir_on_mins1 > 9:
+                        text(0,1,3,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
                     else:
-                        text(0,1,3,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
-                    ir_on_time = (ir_on_hour * 60) + ir_on_mins
-                    ir_of_time = (ir_of_hour * 60) + ir_of_mins
-                    if ir_on_time >= ir_of_time:
-                        ir_of_hour = ir_on_hour
-                        ir_of_mins = ir_on_mins + 1
-                        if ir_of_mins > 59:
-                            ir_of_mins = 0
-                            ir_of_hour += 1
-                            if ir_of_hour > 23:
-                                ir_of_hour = 0
-                        if ir_of_mins > 9:
-                            text(0,2,3,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                        text(0,1,3,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
+                    ir_on_time1 = (ir_on_hour1 * 60) + ir_on_mins1
+                    ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
+                    if ir_on_time1 >= ir_of_time1:
+                        ir_of_hour1 = ir_on_hour1
+                        ir_of_mins1 = ir_on_mins1 + 1
+                        if ir_of_mins1 > 59:
+                            ir_of_mins1 = 0
+                            ir_of_hour1 += 1
+                            if ir_of_hour1 > 23:
+                                ir_of_hour1 = 0
+                        if ir_of_mins1 > 9:
+                            text(0,2,3,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
                         else:
-                            text(0,2,3,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
-                    ir_of_time = (ir_of_hour * 60) + ir_of_mins
+                            text(0,2,3,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
+                    ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
                     save_config = 1
 
-                elif g == 2 and menu == 7 and IRF == 1:
+                elif g == 2 and menu == 7 and IRF1 == 1:
                     # SWITCH IR1 FILTER OFF TIME
                     if h == 1 and event.button == 3:
-                        ir_of_hour +=1
-                        if ir_of_hour > 23:
-                            ir_of_hour = 0
+                        ir_of_hour1 +=1
+                        if ir_of_hour1 > 23:
+                            ir_of_hour1 = 0
 
                     elif h == 0 and event.button == 3:
-                        ir_of_hour -=1
-                        if ir_of_hour < 0:
-                            ir_of_hour = 23
+                        ir_of_hour1 -=1
+                        if ir_of_hour1 < 0:
+                            ir_of_hour1 = 23
                             
                     elif h == 1:
-                        ir_of_mins +=1
-                        if ir_of_mins > 59:
-                            ir_of_mins = 0
-                            ir_of_hour += 1
-                            if ir_of_hour > 23:
-                                ir_of_hour = 0
+                        ir_of_mins1 +=1
+                        if ir_of_mins1 > 59:
+                            ir_of_mins1 = 0
+                            ir_of_hour1 += 1
+                            if ir_of_hour1 > 23:
+                                ir_of_hour1 = 0
                     elif h == 0:
-                        ir_of_mins -=1
-                        if ir_of_mins  < 0:
-                            ir_of_hour -= 1
-                            ir_of_mins = 59
-                            if ir_of_hour < 0:
-                                ir_of_hour = 23
-                    if ir_of_mins > 9:
-                        text(0,2,3,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                        ir_of_mins1 -=1
+                        if ir_of_mins1  < 0:
+                            ir_of_hour1 -= 1
+                            ir_of_mins1 = 59
+                            if ir_of_hour1 < 0:
+                                ir_of_hour1 = 23
+                    if ir_of_mins1 > 9:
+                        text(0,2,3,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
                     else:
-                        text(0,2,3,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
-                    ir_on_time = (ir_on_hour * 60) + ir_on_mins
-                    ir_of_time = (ir_of_hour * 60) + ir_of_mins
-                    if ir_of_time <= ir_on_time:
-                        ir_on_hour = ir_of_hour
-                        ir_on_mins = ir_of_mins - 1
-                        if ir_on_mins  < 0:
-                            ir_on_hour -= 1
-                            ir_on_mins = 59
-                            if ir_on_hour < 0:
-                                ir_on_hour = 23
-                        if ir_on_mins > 9:
-                            text(0,1,3,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                        text(0,2,3,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
+                    ir_on_time1 = (ir_on_hour1 * 60) + ir_on_mins1
+                    ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
+                    if ir_of_time1 <= ir_on_time1:
+                        ir_on_hour1 = ir_of_hour1
+                        ir_on_mins1 = ir_of_mins1 - 1
+                        if ir_on_mins1  < 0:
+                            ir_on_hour1 -= 1
+                            ir_on_mins1 = 59
+                            if ir_on_hour1 < 0:
+                                ir_on_hour1 = 23
+                        if ir_on_mins1 > 9:
+                            text(0,1,3,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
                         else:
-                            text(0,1,3,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                            text(0,1,3,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
                       
-                    ir_on_time = (ir_on_hour * 60) + ir_on_mins
+                    ir_on_time = (ir_on_hour1 * 60) + ir_on_mins1
                     save_config = 1
                     
                 elif g == 4 and menu == 7 and (Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6):
@@ -3505,11 +3643,23 @@ while True:
                         AF_f_mode1 +=1
                         AF_f_mode1 = min(AF_f_mode1,2)
                     if AF_f_mode1 == 0:
+                        AF_f_spot = 0
+                        fxx = 0
+                        fxy = 0
+                        fxz = 1
                         picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
                     elif AF_f_mode1 == 1:
+                        AF_f_spot = 0
+                        fxx = 0
+                        fxy = 0
+                        fxz = 1
                         picam2.set_controls({"AfMode": controls.AfModeEnum.Auto, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
                         picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
                     elif AF_f_mode1 == 2:
+                        AF_f_spot = 0
+                        fxx = 0
+                        fxy = 0
+                        fxz = 1
                         picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
                         picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
                     text(0,4,3,1,1,AF_f_modes[AF_f_mode1],14,7)
@@ -3566,19 +3716,19 @@ while True:
                     else:
                         awb1 -=1
                         awb1 = max(awb1,0)
-                    if awb1 == 0:
+                    if awb1 == 0 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Auto})
-                    elif awb1 == 1:
+                    elif awb1 == 1 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Tungsten})
-                    elif awb1 == 2:
+                    elif awb1 == 2 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Fluorescent})
-                    elif awb1 == 3:
+                    elif awb1 == 3 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Indoor})
-                    elif awb1 == 4:
+                    elif awb1 == 4 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Daylight})
-                    elif awb1 == 5:
+                    elif awb1 == 5 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Cloudy})
-                    elif awb1 == 6:
+                    elif awb1 == 6 and Pi_Cam != 11:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Custom})
                         cg = (red1,blue1)
                         picam2.set_controls({"AwbEnable": False,"ColourGains": cg})
@@ -3635,49 +3785,48 @@ while True:
                     text(0,9,3,1,1,str(denoises[denoise1]),14,7)
                     save_config = 1
 
-                elif g == 0 and menu == 7 and Pi_Cam > -1:
+                elif g == 0 and menu == 7:
                     # IR FILTER
                     if (h == 1 and event.button == 1) or event.button == 4:
-                        IRF +=1
-                        IRF = min(IRF,len(IR_filters)-1)
+                        IRF1 +=1
+                        IRF1 = min(IRF1,len(IR_filters)-1)
                     else:
-                        IRF -=1
-                        IRF = max(IRF,0)
-                    text(0,0,3,1,1,IR_filters[IRF],14,7)
-                    if IRF == 2:
-                        IRF1 = 0
-                        led_sw_ir.off()
+                        IRF1 -=1
+                        IRF1 = max(IRF1,0)
+                    text(0,0,3,1,1,IR_filters[IRF1],14,7)
+                    if IRF1 == 2:
+                        IRF_on1 = 0
                         led_sw_ir1.off()
                         led_ir_light.on()
                         text(0,0,2,0,1,"IR Filter",14,7)
-                    elif IRF == 3:
-                        IRF1 = 1
-                        led_sw_ir.on()
+                    elif IRF1 == 3:
+                        IRF_on1 = 1
                         led_sw_ir1.on()
-                        led_ir_light.off()
+                        if IRF_on == 1:
+                            led_ir_light.off()
                         text(0,0,1,0,1,"IR Filter",14,7)
-                    if IRF == 0:
+                    if IRF1 == 0:
                         suntimes()
-                    if synced == 1 and IRF == 0:
-                        if ir_on_mins > 9:
-                            text(0,1,2,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                    if synced == 1 and IRF1 == 0:
+                        if ir_on_mins1 > 9:
+                            text(0,1,2,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
                         else:
-                            text(0,1,2,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
-                    elif IRF == 0:
-                        if ir_on_mins > 9:
-                            text(0,1,0,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                            text(0,1,2,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
+                    elif IRF1 == 0:
+                        if ir_on_mins1 > 9:
+                            text(0,1,0,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
                         else:
-                            text(0,1,0,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
-                    if synced == 1 and IRF == 0:                
-                        if ir_of_mins > 9:
-                            text(0,2,2,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                            text(0,1,0,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
+                    if synced == 1 and IRF1 == 0:                
+                        if ir_of_mins1 > 9:
+                            text(0,2,2,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
                         else:
-                            text(0,2,2,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
-                    elif IRF == 0:
-                        if ir_of_mins > 9:
-                            text(0,2,0,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                            text(0,2,2,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
+                    elif IRF1 == 0:
+                        if ir_of_mins1 > 9:
+                            text(0,2,0,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
                         else:
-                            text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                            text(0,2,0,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
                     save_config = 1
                     
 # MENUS ====================================================================================================
@@ -3817,7 +3966,7 @@ while True:
                                     text(0,5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
 
                             text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
-                            if fxz != 1:
+                            if AF_f_spot == 1:
                                 text(0,0,3,1,1,"Spot",14,7)
                         if Pi_Cam > -1:
                             text(0,1,1,0,1,"IRF ON time",14,7)
@@ -3859,7 +4008,7 @@ while True:
                                 text(0,8,0,1,1,str(blue)[0:3],14,7)
                         text(0,9,5,0,1,"Denoise",14,7)
                         text(0,9,3,1,1,str(denoises[denoise]),14,7)
-                        if IRF1 == 0:
+                        if IRF_on == 0:
                             text(0,0,2,0,1,"IR Filter",14,7)
                         else:
                             text(0,0,1,0,1,"IR Filter",14,7)
@@ -4137,35 +4286,35 @@ while True:
                                 else:
                                     text(0,5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
                             text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
-                            if fxz != 1:
-                                text(0,5,3,1,1,"Spot",14,7)
+                            if AF_f_spot1 == 1:
+                                text(0,4,3,1,1,"Spot",14,7)
                         if Pi_Cam > -1:
                             text(0,1,1,0,1,"IRF ON time",14,7)
-                            if IRF == 0:
+                            if IRF1 == 0:
                                 clr = 2
                             else:
                                 clr = 3
                             if synced == 1 and cam2 != "1":
-                                if ir_on_mins > 9:
-                                    text(0,1,clr,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                                if ir_on_mins1 > 9:
+                                    text(0,1,clr,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
                                 else:
-                                    text(0,1,clr,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                                    text(0,1,clr,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
                             else:
-                                if ir_on_mins > 9:
-                                    text(0,1,0,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
+                                if ir_on_mins1 > 9:
+                                    text(0,1,0,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
                                 else:
-                                    text(0,1,0,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                                    text(0,1,0,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
                             text(0,2,1,0,1,"IRF OFF time",14,7)
                             if synced == 1 and cam2 != "1":
-                                if ir_of_mins > 9:
-                                    text(0,2,clr,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                                if ir_of_mins1 > 9:
+                                    text(0,2,clr,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
                                 else:
-                                    text(0,2,clr,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                                    text(0,2,clr,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
                             else:
-                                if ir_of_mins > 9:
-                                    text(0,2,0,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
+                                if ir_of_mins1 > 9:
+                                    text(0,2,0,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
                                 else:
-                                    text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                                    text(0,2,0,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
                         if Pi_Cam != 11:
                             text(0,6,5,0,1,"AWB",14,7)
                             text(0,6,3,1,1,str(awbs[awb1]),14,7)
@@ -4179,11 +4328,11 @@ while True:
                                 text(0,8,0,1,1,str(blue1)[0:3],14,7)
                         text(0,9,5,0,1,"Denoise",14,7)
                         text(0,9,3,1,1,str(denoises[denoise1]),14,7)
-                        if IRF1 == 0:
+                        if IRF_on == 0:
                             text(0,0,2,0,1,"IR Filter",14,7)
                         else:
                             text(0,0,1,0,1,"IR Filter",14,7)
-                        text(0,0,3,1,1,IR_filters[IRF],14,7)
+                        text(0,0,3,1,1,IR_filters[IRF1],14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
                         # restart circular buffer
                         start_buffer()
@@ -4278,7 +4427,7 @@ while True:
                 config[60] = int(AF_focus1)
                 config[61] = AF_f_mode 
                 config[62] = int(AF_focus)
-                config[63] = IRF1
+                config[63] = IRF_on
                 config[64] = on_hour
                 config[65] = of_hour
                 config[66] = on_mins
@@ -4288,6 +4437,14 @@ while True:
                 config[70] = ir_on_mins
                 config[71] = ir_of_mins
                 config[72] = camera_sw
+                config[73] = AF_f_spot
+                config[74] = AF_f_spot1
+                config[75] = ir_on_hour1
+                config[76] = ir_of_hour1
+                config[77] = ir_on_mins1
+                config[78] = ir_of_mins1
+                config[79] = IRF1
+                config[80] = IRF_on1
 
               
                 with open(config_file, 'w') as f:
