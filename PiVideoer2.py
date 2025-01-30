@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.07"
+version = "1.08"
 
 import time
 import cv2
@@ -121,10 +121,10 @@ sharpness     = 4       # sharpness *
 saturation    = 10      # saturation *
 fps           = 25      # camera fps
 AF_f_mode     = 1       # AF camera focus mode *
-AF_f_spot     = 0
+AF_f_spot     = 0       # AF spot mode
 AF_focus      = 1       # AF camera manual focus default *
 IRF           = 0       # Waveshare IR Filter switch MODE *
-IRF_on       = 0       # Waveshare IR Filter switch ON/OFF *
+IRF_on        = 0       # Waveshare IR Filter switch ON/OFF *
 ir_on_hour    = 9       # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
 ir_of_hour    = 10      # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
 ir_on_mins    = 0       # Switch IR Filter ON mins, 0 - 59 *
@@ -146,7 +146,7 @@ sharpness1    = 4       # sharpness *
 saturation1   = 10      # saturation *
 fps1          = 25      # camera fps *
 AF_f_mode1    = 1       # AF camera focus mode *
-AF_f_spot1    = 1
+AF_f_spot1    = 0       # AF spot mode
 AF_focus1     = 1       # AF camera manual focus default *
 IRF1          = 0       # Waveshare IR Filter switch MODE *
 IRF_on1       = 0       # Waveshare IR Filter switch ON/OFF *
@@ -181,7 +181,6 @@ camera_sw     = 0       # camera switch mode *
 # initialise parameters
 config_file   = "PiVideoconfig035.txt"
 old_camera    = camera
-old_camera_sw = camera_sw
 synced        = 0
 show          = 0
 reboot        = 0
@@ -391,6 +390,10 @@ ir_on_mins1 = config[77]
 ir_of_mins1 = config[78]
 IRF1        = config[79]
 IRF_on1     = config[80]
+
+if camera_sw == 3:
+    camera = 1
+    old_camera = camera
 
 on_time     = (on_hour * 60) + on_mins
 of_time     = (of_hour * 60) + of_mins
@@ -1828,39 +1831,7 @@ while True:
                 text(0,9,3,0,1," ",14,7)
                 text(0,9,3,1,1," ",14,7)
             rep = 1
-
-        # ARDUCAM AF
-        #if (Pi_Cam == 5 or Pi_Cam == 6) and AF_f_mode == 0 and fcount < max_fcount and Pi != 5:
-        #        foc = cv2.Laplacian(gray, cv2.CV_64F).var()
-        #        if menu == -1:
-        #            text(0,9,3,0,1,"Focusing...",14,7)
-        #            text(0,9,3,1,1,str(int(foc)),14,7)
-        #        if foc >= min_foc:
-        #            ran = 0
-        #        else:
-        #            focus = random.randint(10,3990)
-        #            fcount = 1
-        #            ran = 1
-        #            old_foc = foc
-        #        if (int(foc) >= int(old_foc) or fcount == 0) and ran == 0:
-        #            if fcount == 0:
-        #                if focus < int(2000):
-        #                    focus  += fstep
-        #                else:
-        #                    focus  -= fstep
-        #            else:        
-        #                focus  += fstep
-        #        elif ran == 0:
-        #            fstep = -fstep
-        #            focus += fstep
-        #        old_foc = foc
-        #        if focus < 10 or focus > 3990:
-        #            focus = int(2000)
-        #            fcount = 0
-        #        os.system("v4l2-ctl -d /dev/v4l-subdev" + str(foc_sub5) + " -c focus_absolute=" + str(focus))
-        #        time.sleep(.5)
-        #        fcount += 1
-                
+               
     save_config = 0
     #check for any mouse button presses
     for event in pygame.event.get():
@@ -1983,7 +1954,6 @@ while True:
                     if os.path.exists('mylist.txt'):
                         os.remove('mylist.txt')
                     txtvids = []
-                    camera_sw = old_camera_sw
                     if camera != old_camera:
                         camera = old_camera
                         picam2.stop_encoder()
@@ -3212,7 +3182,6 @@ while True:
                         camera_sw -=1
                         camera_sw = max(camera_sw,0)
                     text(0,6,3,1,1,str(camera_sws[camera_sw]),14,7)
-                    old_camera_sw = camera_sw
                     if camera_sw == 2:
                         camera = 0
                         if IRF_on == 1:
