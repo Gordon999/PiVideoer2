@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.08"
+version = "1.09"
 
 import time
 import cv2
@@ -393,6 +393,9 @@ IRF_on1     = config[80]
 
 if camera_sw == 3:
     camera = 1
+    old_camera = camera
+elif camera_sw == 2:
+    camera = 0
     old_camera = camera
 
 on_time     = (on_hour * 60) + on_mins
@@ -1197,7 +1200,20 @@ while True:
     # menu timer
     if time.monotonic() - menu_timer > menu_time and menu != -1:
         menu_timer = time.monotonic()
-        main_menu()
+        if camera != old_camera:
+            camera = old_camera
+            picam2.stop_encoder()
+            picam2.close()
+            picam2.stop()
+            Camera_Version()
+            pygame.display.set_caption('Action ' + cameras[Pi_Cam])
+            # restart circular buffer
+            start_buffer()
+            if camera == 1:
+                set_parameters1()
+            else:
+                set_parameters()
+            main_menu()
     # time sync 
     if time.monotonic() - sync_timer > sync_time and not encoding:
         sync_timer = time.monotonic()
@@ -1243,7 +1259,7 @@ while True:
         # switch cameras if switch time reached and clocked synced
         if camera_sw <= 1 and cam2 != "1": # AUTO (Sun) or SET TIMES - switch cameras on set times
           if synced == 1 and on_time < of_time and menu != 1 and menu != 2 and menu != 6 and menu != 7:
-              if ((hour* 60) + mins >= on_time and (hour* 60) + mins < of_time) and camera == 1:
+              if (((hour* 60) + mins >= on_time and (hour* 60) + mins < of_time) and camera == 1) or (camera == 1 and old_camera == 0):
                     camera = 0
                     if IRF_on == 1 and IRF_on1 == 1:
                         led_ir_light.off()
@@ -1262,7 +1278,7 @@ while True:
                         set_parameters()
                     else:
                         set_parameters1()
-              elif ((hour* 60) + mins >= of_time or (hour* 60) + mins < on_time) and camera == 0:
+              elif (((hour* 60) + mins >= of_time or (hour* 60) + mins < on_time) and camera == 0)  or (camera == 0 and old_camera == 1):
                     camera = 1
                     led_ir_light.on()
                     old_camera = camera
