@@ -1,6 +1,9 @@
 # Pi_Videoer2
 
-A python script to capture Videos from Pi v1,2,3 , HQ or GS cameras , Arducam OWLSIGHT or HAWKEYE 64MP AF camera, Arducam 16MP AF camera or Waveshare imx290-83 camera, triggered by motion , external trigger or manually. 
+A python script to capture triggered Videos from Pi v1,2,3 , HQ or GS cameras , Arducam OWLSIGHT or HAWKEYE 64MP AF camera, Arducam 16MP AF camera or Waveshare imx290-83 camera, triggered by motion , external trigger or manually. 
+
+if you want continuous video capture try https://github.com/Gordon999/PiVideoer3
+
 Uses Raspberry OS BULLSEYE or BOOKWORM (for BOOKWORM switch to X11 not Wayland) and Picamera2.
 
 It should also work with any other camera that you have installed, eg with a dtoverlay, and works with picamera2.
