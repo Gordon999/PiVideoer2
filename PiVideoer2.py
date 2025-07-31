@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.09"
+version = "1.10"
 
 import time
 import cv2
@@ -253,6 +253,19 @@ shutters      = [-4000,-2000,-1600,-1250,-1000,-800,-640,-500,-400,-320,-288,-25
                 -50,-48,-40,-30,-25,-20,-15,-13,-10,-8,-6,-5,-4,-3,0.4,0.5,0.6,0.8,1]
 IR_filters    = ['Auto','Set Times','OFF','ON']
 camera_sws    = ['Auto','Set Times','ONE','TWO']
+
+#check linux version.
+if os.path.exists ("/run/shm/lv.txt"): 
+    os.remove("/run/shm/lv.txt")
+os.system("cat /etc/os-release >> /run/shm/lv.txt")
+with open("/run/shm/lv.txt", "r") as file:
+        line = file.readline()
+        while line:
+           line = file.readline()
+           if line[0:16] == "VERSION_CODENAME":
+               lver = line
+lvers = lver.split("=")
+lver = lvers[1][0:6]
 
 #check Pi model.
 Pi = 0
@@ -568,13 +581,16 @@ if threshold == 0:
 def Camera_Version():
   global lores_width,lores_height,vid_width,vid_height,old_vf,bw,Pi_Cam,cam1,cam2,camera,camids,max_gain,max_vf,max_vfs,swidth,sheight
   global a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,pre_width,scr_width,scr_height,scientif
-  if os.path.exists('libcams.txt'):
-      os.rename('libcams.txt', 'oldlibcams.txt')
-  os.system("rpicam-vid --list-cameras >> libcams.txt")
+  if os.path.exists('rpicams.txt'):
+     os.rename('rpicams.txt', 'oldrpicams.txt')
+  if lver != "bookwo" and lver != "trixie":
+     os.system("libcamera-vid --list-cameras >> rpicams.txt")
+  else:
+     os.system("rpicam-vid --list-cameras >> rpicams.txt")
   time.sleep(0.5)
-  # read libcams.txt file
+  # read rpicams.txt file
   camstxt = []
-  with open("libcams.txt", "r") as file:
+  with open("rpicams.txt", "r") as file:
     line = file.readline()
     while line:
         camstxt.append(line.strip())
