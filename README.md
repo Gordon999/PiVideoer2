@@ -35,8 +35,6 @@ To install:
 
 Install latest FULL RaspiOS based on Bullseye or Bookworm (tested with FULL 32bit and 64bit versions)
 
-if using BOOKWORM switch to X11. sudo raspi-config, choose advanced , choose 6A X11 option, reboot.
-
 sudo apt install python3-opencv
 
 sudo pip3 install ephem --break-system-packages (or use venv!!)
