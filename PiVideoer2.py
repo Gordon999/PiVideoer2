@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.10"
+version = "1.11"
 
 import time
 import cv2
@@ -104,6 +104,7 @@ mp4_anno      = 1       # mp4_annotate MP4s with date and time , 1 = yes, 0 = no
 SD_F_Act      = 0       # Action on SD FULL, 0 = STOP, 1 = DELETE OLDEST VIDEO, 2 = COPY TO USB (if fitted) *
 interval      = 0       # seconds of wait between capturing Pictures / TIMELAPSE (set threshold to 0)*
 v_length      = 15000   # video length in mS *
+
 # setup for 1st camera
 mode          = 1       # set camera mode *
 speed         = 18      # set manual shutter , in shutters list *
@@ -129,6 +130,7 @@ ir_on_hour    = 9       # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
 ir_of_hour    = 10      # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
 ir_on_mins    = 0       # Switch IR Filter ON mins, 0 - 59 *
 ir_of_mins    = 0       # Switch IR Filter OFF mins, 0 - 59 *
+
 # setup for 2nd camera (Pi5 ONLY)
 mode1         = 1       # set camera mode *
 speed1        = 18      # set manual shutter , in shutters list *
@@ -3431,32 +3433,33 @@ while True:
                             pygame.display.update()
 
                   elif g == 2  and show == 1:
-                    #Show Video
-                    vids = glob.glob(vid_dir + '2*.mp4')
-                    Rids = glob.glob('/run/shm/2*.mp4')
-                    for x in range(0,len(Rids)):
-                       vids.append(Rids[x])
-                    vids.sort()
-                    if len(Jpegs) > 0:
-                      jpgs = Jpegs[q].split("/")
-                      if jpgs[1] != 'run':
-                        jp = jpgs[4][:-4]
-                      else:
-                        jp = jpgs[3][:-4]
-                      stop = 0
-                      for x in range(len(vids)-1,-1,-1):
-                        vide = vids[x].split("/")
-                        if vide[1] != 'run':
-                            vid = vide[4][:-4]
-                        else:
-                            vid = vide[3][:-4]
-                        if vid == jp and stop == 0:
+                      #Show Video
+                      print(Jpegs[q])
+                      vids = glob.glob(vid_dir + '2*.mp4')
+                      Rids = glob.glob('/run/shm/2*.mp4')
+                      for x in range(0,len(Rids)):
+                          vids.append(Rids[x])
+                      vids.sort()
+                      if len(Jpegs) > 0:
+                          jpgs = Jpegs[q].split("/")
+                          if jpgs[1] != 'run':
+                              jp = jpgs[4][:-4]
+                          else:
+                              jp = jpgs[3][:-4]
+                          stop = 0
+                          for x in range(len(vids)-1,-1,-1):
+                            vide = vids[x].split("/")
                             if vide[1] != 'run':
-                                os.system("vlc /" + vide[1] + "/" + vide[2] + "/" + vide[3] + "/" + vid + '.mp4')
+                                vid = vide[4][:-4]
                             else:
-                                os.system("vlc /" + vide[1] + "/" + vide[2] + "/" + vid + '.mp4')
+                                vid = vide[3][:-4]
+                            if vid == jp and stop == 0:
+                                if vide[1] != 'run':
+                                    os.system("vlc /" + vide[1] + "/" + vide[2] + "/" + vide[3] + "/" + vid + '.mp4')
+                                else:
+                                    os.system("vlc /" + vide[1] + "/" + vide[2] + "/" + vid + '.mp4')
 
-                            stop = 1
+                                stop = 1
 
                   elif g == 3:
                     # MP4 FPS
@@ -3528,6 +3531,7 @@ while True:
                     # DELETE A VIDEO
                     menu_timer  = time.monotonic()
                     try:
+                      print(Jpegs[q])
                       Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
                       frames = len(Videos)
                       Rideos = glob.glob('/run/shm/2???????????.mp4')
@@ -3536,7 +3540,7 @@ while True:
                       for x in range(0,len(Rideos)):
                          Videos.append(Rideos[x])
                       Videos.sort()
-                      Jpegs = glob.glob(h_user + "/" + '/Videos/2*.jpg')
+                      Jpegs = glob.glob(h_user + '/Videos/2*.jpg')
                       Rpegs = glob.glob('/run/shm/2*.jpg')
                       for x in range(0,len(Rpegs)):
                          Jpegs.append(Rpegs[x])
