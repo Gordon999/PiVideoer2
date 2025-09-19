@@ -4,7 +4,7 @@ A python script to capture triggered Videos from Pi v1,2,3 , HQ or GS cameras , 
 
 if you want continuous video capture try https://github.com/Gordon999/PiVideoer3
 
-Uses Raspberry OS BULLSEYE or BOOKWORM (for BOOKWORM switch to X11 not Wayland) and Picamera2.
+Uses Raspberry OS BULLSEYE or BOOKWORM and Picamera2.
 
 It should also work with any other camera that you have installed, eg with a dtoverlay, and works with picamera2.
 
