@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.11"
+version = "1.13"
 
 import time
 import cv2
@@ -223,7 +223,7 @@ old_show_vid  = show_vid
 
 # apply timestamp to videos
 def apply_timestamp(request):
-  global mp4_anno
+  global mp4_anno,origin,font,scale,colour,thickness
   if mp4_anno == 1:
       timestamp = time.strftime("%Y-%m-%d %X")
       with MappedArray(request, "main") as m:
@@ -243,7 +243,7 @@ cameras       = ['', 'Pi v1', 'Pi v2', 'Pi v3', 'Pi HQ','Arducam 16MP','Arducam 
 camids        = ['','ov5647','imx219','imx708','imx477',      'imx519',      'arduca','imx296',          'ov64a4','imx290','imx500','ov9281']
 max_gains     = [64,     255,      40,      64,      88,            64,            64,      64,                64,      64,      64,      64]
 swidths       = [ 0,    2592,    3280,    4608,    4056,          4656,          9152,    1456,              9248,    1920,    1920,    1280]
-sheights      = [ 0,    1944,     2464,   2592,    3040,          3496,          6944,    1088,              6944,    1080,    1080,     800]
+sheights      = [ 0,    1944,    2464,    2592,    3040,          3496,          6944,    1088,              6944,    1080,    1080,     800]
 modes         = ['manual','normal','short','long']
 meters        = ['CentreWeighted','Spot','Matrix']
 awbs          = ['auto','tungsten','fluorescent','indoor','daylight','cloudy','custom']
@@ -2274,7 +2274,7 @@ while True:
                         text(0,4,3,1,1," 0       1  ",14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)                        
 
-                    elif g == 6 and (ram_frames > 0 or frames > 0):
+                    elif g == 6: # and (ram_frames > 0 or frames > 0):
                         # show menu
                         menu = 4
                         menu_timer  = time.monotonic()
@@ -2307,13 +2307,23 @@ while True:
                             pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,pre_height,scr_width-bw,scr_height))
                             pygame.display.update()
                             text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
+                        else:
+                            pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,0,scr_width-bw,scr_height))
+                            fontObj = pygame.font.Font(None, 30)
+                            msg = "No Videos recorded"
+                            msgSurfaceObj = fontObj.render(msg, False, (255,0,0))
+                            msgRectobj = msgSurfaceObj.get_rect()
+                            msgRectobj.topleft = (10,10)
+                            windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
+                            pygame.display.update()
                         text(0,0,2,0,1,"SHOW Camera",14,7)
                         if old_show_vid == 0:
                             text(0,0,3,1,1,"OFF",14,7)
                         else:
                             text(0,0,3,1,1,"ON",14,7)
-                        text(0,1,2,0,1,"Still",14,7)
-                        text(0,2,2,0,1,"Show Video",14,7)
+                        if len(Jpegs) > 0:
+                            text(0,1,2,0,1,"Still",14,7)
+                            text(0,2,2,0,1,"Show Video",14,7)
                         text(0,3,2,0,1,"MP4 fps",14,7)
                         text(0,3,3,1,1,str(mp4_fps),14,7)
                         text(0,4,2,0,1,"annotate MP4",14,7)
@@ -2321,20 +2331,21 @@ while True:
                             text(0,4,3,1,1,"No",14,7)
                         else:
                             text(0,4,3,1,1,"Yes",14,7)
-                        if frames > 0:
-                            text(0,5,2,0,1,"MOVE MP4s",14,7)
-                            text(0,5,2,1,1,"to USB",14,7)
-                        else:
-                            text(0,5,0,0,1,"MOVE MP4s",14,7)
-                            text(0,5,0,1,1,"to USB",14,7)
-                        text(0,6,3,0,1,"DELETE ",14,7)
-                        text(0,6,3,1,1,"VIDEO ",14,7)
-                        text(0,7,3,0,1,"DELETE",14,7)
-                        text(0,7,3,1,1,"ALL VIDS  ",14,7)
-                        text(0,8,2,0,1,"SHOW ALL",14,7)
-                        text(0,8,2,1,1,"Stills",14,7)
-                        text(0,9,2,0,1,"MAKE FULL",14,7)
-                        text(0,9,2,1,1,"MP4",14,7)
+                        if len(Jpegs) > 0:
+                            if frames > 0:
+                                text(0,5,2,0,1,"MOVE MP4s",14,7)
+                                text(0,5,2,1,1,"to USB",14,7)
+                            else:
+                                text(0,5,0,0,1,"MOVE MP4s",14,7)
+                                text(0,5,0,1,1,"to USB",14,7)
+                            text(0,6,3,0,1,"DELETE ",14,7)
+                            text(0,6,3,1,1,"VIDEO ",14,7)
+                            text(0,7,3,0,1,"DELETE",14,7)
+                            text(0,7,3,1,1,"ALL VIDS  ",14,7)
+                            text(0,8,2,0,1,"SHOW ALL",14,7)
+                            text(0,8,2,1,1,"Stills",14,7)
+                            text(0,9,2,0,1,"MAKE FULL",14,7)
+                            text(0,9,2,1,1,"MP4",14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)
                        
                     elif g == 7:
@@ -3432,9 +3443,8 @@ while True:
                             windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
                             pygame.display.update()
 
-                  elif g == 2  and show == 1:
+                  elif g == 2  and show == 1 and len(Jpegs) > 0:
                       #Show Video
-                      print(Jpegs[q])
                       vids = glob.glob(vid_dir + '2*.mp4')
                       Rids = glob.glob('/run/shm/2*.mp4')
                       for x in range(0,len(Rids)):
