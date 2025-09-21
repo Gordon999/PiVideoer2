@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.13"
+version = "1.15"
 
 import time
 import cv2
@@ -47,11 +47,11 @@ import ephem
 import datetime
 
 # Your Location
-somewhere = ephem.Observer()
-somewhere.lat = '51.49340' # set your location latitude
-somewhere.lon = '00.00980' # set your location longtitude
-somewhere.elevation = 100  # set your location height
-UTC_offset = 0             # set your local time offset to UTC
+you = ephem.Observer()
+you.lat       = '51.49340' # set your location latitude
+you.lon       = '00.00980' # set your location longtitude
+you.elevation = 100        # set your location height
+UTC_offset    = 0          # set your local time offset to UTC
 
 # set screen size
 scr_width  = 800
@@ -126,8 +126,8 @@ AF_f_spot     = 0       # AF spot mode
 AF_focus      = 1       # AF camera manual focus default *
 IRF           = 0       # Waveshare IR Filter switch MODE *
 IRF_on        = 0       # Waveshare IR Filter switch ON/OFF *
-ir_on_hour    = 9       # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
-ir_of_hour    = 10      # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
+ir_on_hour    = 20      # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
+ir_of_hour    = 7       # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
 ir_on_mins    = 0       # Switch IR Filter ON mins, 0 - 59 *
 ir_of_mins    = 0       # Switch IR Filter OFF mins, 0 - 59 *
 
@@ -152,8 +152,8 @@ AF_f_spot1    = 0       # AF spot mode
 AF_focus1     = 1       # AF camera manual focus default *
 IRF1          = 0       # Waveshare IR Filter switch MODE *
 IRF_on1       = 0       # Waveshare IR Filter switch ON/OFF *
-ir_on_hour1   = 9       # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
-ir_of_hour1   = 10      # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
+ir_on_hour1   = 20      # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
+ir_of_hour1   = 7       # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
 ir_on_mins1   = 0       # Switch IR Filter ON mins, 0 - 59 *
 ir_of_mins1   = 0       # Switch IR Filter OFF mins, 0 - 59 *
 #===========================================================================================
@@ -427,11 +427,11 @@ def suntimes():
     global on_hour,on_mins,of_hour,of_mins,camera_sw,on_time,of_time,IRF,IRF1,ir_on_time,ir_of_time,ir_on_time1,ir_of_time1
     global ir_on_hour1,ir_on_mins1,ir_of_hour1,ir_of_mins1
     sun = ephem.Sun()
-    r1 = str(somewhere.next_rising(sun))
+    r1 = str(you.next_rising(sun))
     sunrise = datetime.datetime.strptime(str(r1), '%Y/%m/%d %H:%M:%S')
     sr_timedelta = sunrise - datetime.datetime(2020, 1, 1)
     sr_seconds = sr_timedelta.total_seconds() + (UTC_offset * 3600)
-    s1 = str(somewhere.next_setting(sun))
+    s1 = str(you.next_setting(sun))
     sunset = datetime.datetime.strptime(str(s1), '%Y/%m/%d %H:%M:%S')
     ss_timedelta = sunset - datetime.datetime(2020, 1, 1)
     ss_seconds = ss_timedelta.total_seconds() + (UTC_offset * 3600)
@@ -683,7 +683,7 @@ print(Pi_Cam,cam1,cam2)
 
 # mp4_annotation parameters
 colour = (255, 255, 255)
-origin = (int(vid_width/3), int(vid_height - 50))
+origin = (184, int(vid_height - 25))
 font   = cv2.FONT_HERSHEY_SIMPLEX
 scale  = 1
 thickness = 2
@@ -1052,9 +1052,6 @@ def text(col,row,fColor,top,upd,msg,fsize,bcolor):
    if top == 0:
        pygame.draw.rect(windowSurfaceObj,bColor,Rect(bx+4,by+3,bw-2,int(bh/2)-4))
        msgRectobj.topleft = (bx + 7, by + 3)
-   elif msg == "START - END" or msg == "<<   <    >   >>":
-       pygame.draw.rect(windowSurfaceObj,bColor,Rect(bx+int(bw/4),by+int(bh/2)+1,int(bw/1.5),int(bh/2)-4))
-       msgRectobj.topleft = (bx+7, by + int(bh/2))
    else:
        pygame.draw.rect(windowSurfaceObj,bColor,Rect(bx+int(bw/4),by+int(bh/2)+1,int(bw/1.5),int(bh/2)-4))
        msgRectobj.topleft = (bx+int(bw/4), by + int(bh/2))
@@ -1231,7 +1228,7 @@ while True:
                 set_parameters1()
             else:
                 set_parameters()
-            main_menu()
+        main_menu()
     # time sync 
     if time.monotonic() - sync_timer > sync_time and not encoding:
         sync_timer = time.monotonic()
@@ -1466,7 +1463,7 @@ while True:
             gray = crop[:,:,col_filter]
           else:
             gray = cv2.cvtColor(crop,cv2.COLOR_RGB2GRAY)
-          if col_filter < 3 and (preview == 1 or col_timer > 0):
+          if col_filter < 4 and (preview == 1 or col_timer > 0):
             im = Image.fromarray(gray)
             im.save("/run/shm/qw.jpg")
           gray = gray.astype(np.int16)
@@ -1484,9 +1481,9 @@ while True:
             # COMPARE NEW IMAGE WITH OLD IMAGE
             ar5 = abs(np.subtract(np.array(gray),np.array(oldimg)))
             # APPLY THRESHOLD VALUE
-            ar5[ar5 <  threshold] = 0
+            ar5[ar5 <  threshold]  = 0
             ar5[ar5 >= threshold2] = 0
-            ar5[ar5 >= threshold] = 1
+            ar5[ar5 >= threshold]  = 1
             # APPLY MASK
             if mask.shape == ar5.shape:
                ar5 = ar5 * mask
@@ -1801,7 +1798,7 @@ while True:
               cropped = pygame.transform.scale(cropped,(pre_width,pre_height))
           windowSurfaceObj.blit(cropped,(0, 0))
           # show colour filtering
-          if col_filter < 3 and (preview == 1 or col_timer > 0):
+          if col_filter < 4 and (preview == 1 or col_timer > 0):
             imageqw = pygame.image.load('/run/shm/qw.jpg')
             if zoom == 0:
                 imagegray = pygame.transform.scale(imageqw, (v_crop*2,h_crop*2))
@@ -1871,7 +1868,7 @@ while True:
     for event in pygame.event.get():
         if (event.type == MOUSEBUTTONUP):
             timer = time.monotonic()
-            menu_timer  = time.monotonic()
+            menu_timer = time.monotonic()
             mousex, mousey = event.pos
             # set crop position
             if mousex < pre_width and zoom == 0 and ((menu != 7 or ((Pi_Cam == 3 or Pi_Cam == 8) and AF_f_mode == 1)) or (Pi_Cam == 5 or Pi_Cam == 6)) and event.button != 3:
@@ -2274,7 +2271,7 @@ while True:
                         text(0,4,3,1,1," 0       1  ",14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)                        
 
-                    elif g == 6: # and (ram_frames > 0 or frames > 0):
+                    elif g == 6: 
                         # show menu
                         menu = 4
                         menu_timer  = time.monotonic()
