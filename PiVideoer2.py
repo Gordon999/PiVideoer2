@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.15"
+version = "1.17"
 
 import time
 import cv2
@@ -228,7 +228,7 @@ def apply_timestamp(request):
       timestamp = time.strftime("%Y-%m-%d %X")
       with MappedArray(request, "main") as m:
           lst = list(origin)
-          lst[0] += 370
+          lst[0] += 365
           lst[1] -= 20
           end_point = tuple(lst)
           cv2.rectangle(m.array, origin, end_point, (0,0,0), -1) 
@@ -960,6 +960,7 @@ if len(USB_Files) > 0:
    
 # read list of existing Video Files
 Videos = []
+Jpegs = []
 frames = 0
 ram_frames = 0
 
@@ -1069,17 +1070,17 @@ def main_menu():
     for d in range(0,11):
          button(0,d,0)
     button(0,1,3)
-    Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+    Videos = glob.glob(h_user + '/Videos/*.mp4')
     frames = len(Videos)
-    Jpegs = glob.glob(h_user + '/Videos/2*.jpg')
+    Jpegs = glob.glob(h_user + '/Videos/*.jpg')
     for x in range(0,len(Jpegs)):
         if not os.path.exists(Jpegs[x][:-4] + ".mp4"):
             os.remove(Jpegs[x])
-    Rideos = glob.glob('/run/shm/2???????????.mp4')
+    Rideos = glob.glob('/run/shm/*.mp4')
     for x in range(0,len(Rideos)):
         Videos.append(Rideos[x])
     ram_frames = len(Rideos)
-    Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+    Videos = glob.glob(h_user + '/Videos/*.mp4')
     Videos.sort()
     frames = len(Videos)
     vf = str(ram_frames) + " - " + str(frames)
@@ -1147,7 +1148,6 @@ main_menu()
 oldimg = []
 show   = 0
 vidjr  = 0
-Videos = []
 last   = time.monotonic()
 check_timer = time.monotonic()
 
@@ -1387,11 +1387,11 @@ while True:
                     text(0,0,5,0,1,"CAPTURE",16,0)
                     vf = str(ram_frames) + " - " + str(frames)
                     text(0,0,3,1,1,vf,14,4)
-                Rideos = glob.glob('/run/shm/2???????????.mp4')
+                Rideos = glob.glob('/run/shm/*.mp4')
                 Rideos.sort()
                 for xx in range(0,len(Rideos)):
                     shutil.copy(Rideos[xx], h_user + '/Videos/')
-                Rpegs = glob.glob('/run/shm/2*.jpg')
+                Rpegs = glob.glob('/run/shm/*.jpg')
                 Rpegs.sort()
                 for xx in range(0,len(Rpegs)):
                     shutil.copy(Rpegs[xx], h_user + '/Videos/')
@@ -1539,14 +1539,14 @@ while True:
                 if menu == -1:
                     text(0,0,5,0,1,"CAPTURE",16,0)
                 # read list of existing RAM Video Files
-                Videos = glob.glob('/run/shm/2???????????.mp4')
+                Videos = glob.glob('/run/shm/*.mp4')
                 Videos.sort()
                 frames +=len(Videos)
                 for xx in range(0,len(Videos)):
                     shutil.move(Videos[xx], h_user + '/Videos/')
                 ram_frames = 0
                 # read list of existing RAM Photo Files
-                Jpegs = glob.glob('/run/shm/2*.jpg')
+                Jpegs = glob.glob('/run/shm/*.jpg')
                 Jpegs.sort()
                 for xx in range(0,len(Jpegs)):
                     shutil.move(Jpegs[xx], h_user + '/Videos/')
@@ -1569,6 +1569,12 @@ while True:
                     vf = str(ram_frames) + " - " + str(frames)
                     text(0,0,3,1,1,vf,14,2)
                 last = time.monotonic()
+                Videos = glob.glob(h_user + '/Videos/*.mp4')
+                Videos.sort()
+                Jpegs = glob.glob(h_user + '/Videos/*.jpg')
+                Jpegs.sort()
+                frames = len(Videos)
+                vf = str(ram_frames) + " - " + str(frames)
                 st = os.statvfs("/run/shm/")
                 freeram = (st.f_bavail * st.f_frsize)/1100000
                 free = (os.statvfs('/'))
@@ -1647,10 +1653,9 @@ while True:
                     if ES == 2 and use_gpio == 1:
                         led_s_trig.off()
                         led_s_focus.off()
-                    Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+                    Videos = glob.glob(h_user + '/Videos/*.mp4')
                     frames = len(Videos)
-                    Rideos = glob.glob('/run/shm/2???????????.mp4')
-                    Rideos.sort()
+                    Rideos = glob.glob('/run/shm/*.mp4')
                     ram_frames = len(Rideos)
                     for x in range(0,len(Rideos)):
                          Videos.append(Rideos[x])
@@ -1665,8 +1670,8 @@ while True:
                     free = (os.statvfs('/'))
                     SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
                     ss = str(int(freeram)) + " - " + str(int(SD_storage))
-                    Jpegs = glob.glob(h_user + '/Videos/2*.jpg')
-                    Rpegs = glob.glob('/run/shm/2*.jpg')
+                    Jpegs = glob.glob(h_user + '/Videos/*.jpg')
+                    Rpegs = glob.glob('/run/shm/*.jpg')
                     for x in range(0,len(Rpegs)):
                          Jpegs.append(Rpegs[x])
                     Jpegs.sort()
@@ -1677,26 +1682,26 @@ while True:
                         if menu == -1:
                             text(0,0,5,0,1,"CAPTURE",16,0)
                             text(0,0,5,1,1," ",15,0)
-                        Videos = glob.glob('/run/shm/2???????????.mp4')
+                        Videos = glob.glob('/run/shm/*.mp4')
                         Videos.sort()
                         # move Video RAM Files to SD card
                         for xx in range(0,len(Videos)):
                             if not os.path.exists(h_user + "/" + '/Videos/' + Videos[xx]):
                                 shutil.move(Videos[xx], h_user + '/Videos/')
-                        Rpegs = glob.glob('/run/shm/2*.jpg')
+                        Rpegs = glob.glob('/run/shm/*.jpg')
                         Rpegs.sort()
                         # move Photos RAM Files to SD card
                         for xx in range(0,len(Jpegs)):
                             if not os.path.exists(h_user + "/" + '/Videos/' + Jpegs[xx]):
                                 shutil.move(Jpegs[xx], h_user + '/Videos/')
                         # read list of existing RAM Video Files
-                        Rideos = glob.glob('/run/shm/2???????????.mp4')
+                        Rideos = glob.glob('/run/shm/*.mp4')
                         Rideos.sort()
                         ram_frames = len(Rideos)
                         # read list of existing SD Card Video Files
                         if trace > 0:
                             print ("Step 11 READ SD FILES")
-                        Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+                        Videos = glob.glob(h_user + '/Videos/*.mp4')
                         Videos.sort()
                         frames = len(Videos)
                         vf = str(ram_frames) + " - " + str(frames)
@@ -1737,13 +1742,13 @@ while True:
                             os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
                         text(0,0,2,0,1,"CAPTURE",16,0)
                         while SD_storage > SD_limit:
-                            Jpegs = glob.glob(h_user + '/Videos/2*.jpg')
+                            Jpegs = glob.glob(h_user + '/Videos/*.jpg')
                             Jpegs.sort()
                             if len(Jpegs) > 0:
                                 for q in range(0,len(Jpegs)):
                                     if os.path.getsize(Jpegs[q]) > 0:
                                         shutil.move(Jpegs[q],m_user + "/'" + USB_Files[0] + "'/Videos/")
-                            Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+                            Videos = glob.glob(h_user + '/Videos/*.mp4')
                             Videos.sort()
                             if len(Videos) > 0:
                                 for q in range(0,len(Videos)):
@@ -1766,7 +1771,7 @@ while True:
                             Capture = 0 # stop
                         else:
                             # remove oldest video and jpg from SD card
-                            Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+                            Videos = glob.glob(h_user + '/Videos/*.mp4')
                             Videos.sort()
                             if os.path.getsize(Videos[q]) > 0:
                                 os.remove(Videos[0])
@@ -1952,11 +1957,11 @@ while True:
                         if menu == -1 :
                             button(0,0,1)
                             text(0,0,5,0,1,"CAPTURE",16,0)
-                        zpics = glob.glob('/run/shm/2*.jpg')
+                        zpics = glob.glob('/run/shm/*.jpg')
                         zpics.sort()
                         for xx in range(0,len(zpics)):
                             shutil.copy(zpics[xx], h_user + '/Videos/')
-                        zpics = glob.glob('/run/shm/2???????????.mp4')
+                        zpics = glob.glob('/run/shm/*.mp4')
                         zpics.sort()
                         for xx in range(0,len(zpics)):
                             shutil.copy(zpics[xx], h_user + '/Videos/')
@@ -2279,9 +2284,9 @@ while True:
                             button(0,d,0)
                         show = 1
                         old_cap = Capture
-                        Jpegs = glob.glob(h_user + '/Videos/2*.jpg')
+                        Jpegs = glob.glob(h_user + '/Videos/*.jpg')
                         frames = len(Jpegs)
-                        Rpegs = glob.glob('/run/shm/2*.jpg')
+                        Rpegs = glob.glob('/run/shm/*.jpg')
                         Rpegs.sort()
                         ram_frames = len(Rpegs)
                         for x in range(0,len(Rpegs)):
@@ -3410,11 +3415,6 @@ while True:
                     if menu == 4:
                         text(0,6,3,1,1,"VIDEO ",14,7)
                         text(0,7,3,1,1,"ALL VIDS ",14,7)
-                    Jpegs = glob.glob(h_user + '/Videos/2*.jpg')
-                    Rpegs = glob.glob('/run/shm/2*.jpg')
-                    for x in range(0,len(Rpegs)):
-                       Jpegs.append(Rpegs[x])
-                    Jpegs.sort()
                     if (h == 1 and event.button == 1) or event.button == 4:
                         q +=1
                         if q > len(Jpegs)-1:
@@ -3442,11 +3442,6 @@ while True:
 
                   elif g == 2  and show == 1 and len(Jpegs) > 0:
                       #Show Video
-                      vids = glob.glob(vid_dir + '2*.mp4')
-                      Rids = glob.glob('/run/shm/2*.mp4')
-                      for x in range(0,len(Rids)):
-                          vids.append(Rids[x])
-                      vids.sort()
                       if len(Jpegs) > 0:
                           jpgs = Jpegs[q].split("/")
                           if jpgs[1] != 'run':
@@ -3454,8 +3449,9 @@ while True:
                           else:
                               jp = jpgs[3][:-4]
                           stop = 0
-                          for x in range(len(vids)-1,-1,-1):
-                            vide = vids[x].split("/")
+                          print(Videos)
+                          for x in range(len(Videos)-1,-1,-1):
+                            vide = Videos[x].split("/")
                             if vide[1] != 'run':
                                 vid = vide[4][:-4]
                             else:
@@ -3493,12 +3489,10 @@ while True:
                         text(0,4,3,1,1,"No",14,7)
                         
                   elif g == 5:
-                    #move MP4 to usb
+                    #move MP4s to usb
                     menu_timer  = time.monotonic()
                     if os.path.exists('mylist.txt'):
                         os.remove('mylist.txt')
-                    Mideos = glob.glob(h_user + '/Videos/*.mp4')
-                    Jpegs = glob.glob(h_user + '/Videos/*.jpg')
                     USB_Files  = []
                     USB_Files  = (os.listdir(m_user))
                     if len(USB_Files) > 0 and frames > 0:
@@ -3507,23 +3501,35 @@ while True:
                             os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
                         text(0,5,3,0,1,"MOVING",14,7)
                         text(0,5,3,1,1,"MP4s",14,7)
-                        Videos = glob.glob(h_user + '/Videos/*.mp4')
-                        Videos.sort()
                         for xx in range(0,len(Videos)):
                             movi = Videos[xx].split("/")
-                            if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
-                                os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4])
+                            if movi[1] == "home":
+                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
+                                    os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4])
+                            elif movi[1] == "run":
+                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]):
+                                    os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3])
                             shutil.copy(Videos[xx],m_user + "/" + USB_Files[0] + "/Videos/")
                             if os.path.exists(Videos[xx][:-4] + ".jpg"):
                                 shutil.copy(Videos[xx][:-4] + ".jpg",m_user + "/" + USB_Files[0] + "/Pictures/")
-                            if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
-                                os.remove(Videos[xx])
-                                if Videos[xx][len(Videos[xx]) - 5:] == "f.mp4":
-                                    if os.path.exists(Videos[xx][:-5] + ".jpg"):
-                                        os.remove(Videos[xx][:-5] + ".jpg")
-                                else:
-                                    if os.path.exists(Videos[xx][:-4] + ".jpg"):
-                                        os.remove(Videos[xx][:-4] + ".jpg")
+                            if movi[1] == "home":
+                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
+                                    os.remove(Videos[xx])
+                                    if Videos[xx][len(Videos[xx]) - 5:] == "f.mp4":
+                                        if os.path.exists(Videos[xx][:-5] + ".jpg"):
+                                            os.remove(Videos[xx][:-5] + ".jpg")
+                                    else:
+                                        if os.path.exists(Videos[xx][:-4] + ".jpg"):
+                                            os.remove(Videos[xx][:-4] + ".jpg")
+                            elif movi[1] == "run":
+                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]):
+                                    os.remove(Videos[xx])
+                                    if Videos[xx][len(Videos[xx]) - 5:] == "f.mp4":
+                                        if os.path.exists(Videos[xx][:-5] + ".jpg"):
+                                            os.remove(Videos[xx][:-5] + ".jpg")
+                                    else:
+                                        if os.path.exists(Videos[xx][:-4] + ".jpg"):
+                                            os.remove(Videos[xx][:-4] + ".jpg")
                         Videos = glob.glob(h_user + '/Videos/*.mp4')
                         Jpegs = glob.glob(h_user + '/Videos/*.jpg')
                         for xx in range(0,len(Jpegs)):
@@ -3538,20 +3544,6 @@ while True:
                     # DELETE A VIDEO
                     menu_timer  = time.monotonic()
                     try:
-                      print(Jpegs[q])
-                      Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
-                      frames = len(Videos)
-                      Rideos = glob.glob('/run/shm/2???????????.mp4')
-                      Rideos.sort()
-                      ram_frames = len(Rideos)
-                      for x in range(0,len(Rideos)):
-                         Videos.append(Rideos[x])
-                      Videos.sort()
-                      Jpegs = glob.glob(h_user + '/Videos/2*.jpg')
-                      Rpegs = glob.glob('/run/shm/2*.jpg')
-                      for x in range(0,len(Rpegs)):
-                         Jpegs.append(Rpegs[x])
-                      Jpegs.sort()
                       fontObj = pygame.font.Font(None, 70)
                       msgSurfaceObj = fontObj.render("DELETING....", False, (255,0,0))
                       msgRectobj = msgSurfaceObj.get_rect()
@@ -3562,13 +3554,17 @@ while True:
                       os.remove(Jpegs[q][:-4] + ".mp4")
                     except:
                         pass
-                    Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+                    Videos = glob.glob(h_user + '/Videos/*.mp4')
                     frames = len(Videos)
-                    Rideos = glob.glob('/run/shm/2???????????.mp4')
-                    Rideos.sort()
+                    Rideos = glob.glob('/run/shm/*.mp4')
                     for x in range(0,len(Rideos)):
                          Videos.append(Rideos[x])
                     Videos.sort()
+                    Jpegs = glob.glob(h_user + '/Videos/*.jpg')
+                    Rpegs = glob.glob('/run/shm/*.jpg')
+                    for x in range(0,len(Rpegs)):
+                       Jpegs.append(Rpegs[x])
+                    Jpegs.sort()
                     ram_frames = len(Rideos)
                     if q > len(Videos)-1:
                         q -=1
@@ -3619,17 +3615,17 @@ while True:
                         windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
                         pygame.display.update()
                         try:
-                            Rpegs = glob.glob('/run/shm/2*.jpg')
+                            Rpegs = glob.glob('/run/shm/*.jpg')
                             for xx in range(0,len(Rpegs )):
                                 os.remove(Rpegs[xx])
-                            Rideos = glob.glob('/run/shm/2???????????.mp4')
+                            Rideos = glob.glob('/run/shm/*.mp4')
                             for xx in range(0,len(Rideos)):
                                 os.remove(Rideos[xx])
                             ram_frames = 0
-                            Jpegs = glob.glob(h_user + '/Videos/2*.jpg')
+                            Jpegs = glob.glob(h_user + '/Videos/*.jpg')
                             for xx in range(0,len(Jpegs)):
                                 os.remove(Jpegs[xx])
-                            Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+                            Videos = glob.glob(h_user + '/Videos/*.mp4')
                             for xx in range(0,len(Videos)):
                                 os.remove(Videos[xx])
                             frames = 0
@@ -3643,6 +3639,18 @@ while True:
                         pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,cheight,scr_width-bw,scr_height))
                         show = 0
                         oldimg = []
+                        Videos = glob.glob(h_user + '/Videos/*.mp4')
+                        frames = len(Videos)
+                        Rideos = glob.glob('/run/shm/*.mp4')
+                        for x in range(0,len(Rideos)):
+                            Videos.append(Rideos[x])
+                        Videos.sort()
+                        Jpegs = glob.glob(h_user + '/Videos/*.jpg')
+                        Rpegs = glob.glob('/run/shm/*.jpg')
+                        for x in range(0,len(Rpegs)):
+                           Jpegs.append(Rpegs[x])
+                        Jpegs.sort()
+                        ram_frames = len(Rideos)
                     
                   elif g == 8 and ( frames > 0 or ram_frames > 0):
                     # SHOW ALL STILLS
@@ -3688,8 +3696,8 @@ while True:
                     menu_timer  = time.monotonic()
                     if os.path.exists('mylist.txt'):
                         os.remove('mylist.txt')
-                    Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
-                    Rideos = glob.glob('/run/shm/2???????????.mp4')
+                    Videos = glob.glob(h_user + '/Videos/*.mp4')
+                    Rideos = glob.glob('/run/shm/*.mp4')
                     for x in range(0,len(Rideos)):
                         Videos.append(Rideos[x])
                     Videos.sort()
@@ -3769,7 +3777,7 @@ while True:
                                 text(0,8,0,0,1,"MOVE MP4s",14,7)
                                 text(0,8,0,1,1,"to USB",14,7)
                        
-                        Videos = glob.glob(h_user + '/Videos/2???????????.mp4')
+                        Videos = glob.glob(h_user + '/Videos/*.mp4')
                         USB_Files  = (os.listdir(m_user))
                         Videos.sort()
                         w = 0
