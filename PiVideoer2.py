@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.17"
+version = "1.21"
 
 import time
 import cv2
@@ -35,6 +35,7 @@ from gpiozero import Button
 from gpiozero import LED
 from gpiozero import CPUTemperature
 from gpiozero import PWMLED
+from gpiozero import PWMOutputDevice
 import sys
 import random
 from picamera2 import Picamera2, Preview, MappedArray
@@ -69,9 +70,8 @@ use_gpio   = 1
 s_focus    = 20
 s_trig     = 21
 
-# ext trigger input gpios (if use_gpio = 1)
-e_trig1    = 12
-e_trig2    = 16
+# ext trigger input gpio (if use_gpio = 1)
+e_trig1    = 16
 
 # Waveshare IR filter switch output (if use_gpio = 1)
 sw_ir      = 26
@@ -79,6 +79,10 @@ sw_ir1     = 19
 
 # IR light
 ir_light   = 13
+
+# buzzer
+e_buzz     = 12
+use_buzz   = 1       # enable buzzer on capture, 1 on starting video, 2 on detection *
 
 # fan ctrl gpio (if use_gpio = 1) This is not the Pi5 active cooler !!
 # DISABLE Pi FAN CONTROL in Preferences > Performance to GPIO 14 !!
@@ -181,7 +185,7 @@ camera_sw     = 0       # camera switch mode *
 # * adjustable whilst running
 
 # initialise parameters
-config_file   = "PiVideoconfig035.txt"
+config_file   = "PiVideoconfig037.txt"
 old_camera    = camera
 synced        = 0
 show          = 0
@@ -301,9 +305,10 @@ if use_gpio == 1:
     if fan_ctrl == 1:
         led_fan = PWMLED(fan)
         led_fan.value = 0
+    # optional buzzer
+    buzzer=PWMOutputDevice(e_buzz, initial_value=0,frequency=4000)
     # external input triggers
     button_e_trig1 = Button(e_trig1,pull_up=False)
-    button_e_trig2 = Button(e_trig2,pull_up=False)
 
 # check Vid_configXX.txt exists, if not then write default values
 if not os.path.exists(config_file):
@@ -312,7 +317,7 @@ if not os.path.exists(config_file):
               check_time,sd_hour,vformat,threshold2,col_filter,nr,pre_frames,auto_time,ram_limit,mp4_fps,mp4_anno,SD_F_Act,dspeed,IRF,camera,
               mode1,speed1,gain1,brightness1,contrast1,awb1,int(red1*10),int(blue1*10),meter1,ev1,denoise1,quality1,sharpness1,saturation1,
               fps1,AF_f_mode1,AF_focus1,AF_f_mode,AF_focus,IRF_on,on_hour,of_hour,on_mins,of_mins,ir_on_hour,ir_of_hour,ir_on_mins,ir_of_mins,
-              camera_sw,AF_f_spot,AF_f_spot1,ir_on_hour1,ir_of_hour1,ir_on_mins1,ir_of_mins1,IRF1,IRF_on1]
+              camera_sw,AF_f_spot,AF_f_spot1,ir_on_hour1,ir_of_hour1,ir_on_mins1,ir_of_mins1,IRF1,IRF_on1,use_buzz]
     with open(config_file, 'w') as f:
         for item in defaults:
             f.write("%s\n" % item)
@@ -407,6 +412,7 @@ ir_on_mins1 = config[77]
 ir_of_mins1 = config[78]
 IRF1        = config[79]
 IRF_on1     = config[80]
+use_buzz    = config[81]
 
 if camera_sw == 3:
     camera = 1
@@ -677,6 +683,7 @@ def Camera_Version():
       print("No Camera Found")
       pygame.display.quit()
       sys.exit()
+  pygame.display.set_caption('PiVideoer2  Camera: ' + cameras[Pi_Cam] + ' : ' + str(camera + 1))
             
 Camera_Version()
 suntimes()
@@ -1011,7 +1018,8 @@ if noframe == 0:
 else:
    windowSurfaceObj = pygame.display.set_mode((scr_width,scr_height), pygame.NOFRAME, 24)
    
-pygame.display.set_caption('Action ' + cameras[Pi_Cam])
+ 
+# 
 
 global greyColor, redColor, greenColor, blueColor, dgryColor, lgryColor, blackColor, whiteColor, purpleColor, yellowColor
 bredColor =   pygame.Color(255,   0,   0)
@@ -1223,7 +1231,8 @@ while True:
             picam2.close()
             picam2.stop()
             Camera_Version()
-            pygame.display.set_caption('Action ' + cameras[Pi_Cam])
+             
+             
             # restart circular buffer
             start_buffer()
             if camera == 1:
@@ -1288,7 +1297,8 @@ while True:
                     picam2.close()
                     picam2.stop()
                     Camera_Version()
-                    pygame.display.set_caption('Action ' + cameras[Pi_Cam])
+                     
+                     
                     # restart circular buffer
                     start_buffer()
                     if camera == 0:
@@ -1306,7 +1316,8 @@ while True:
                     picam2.close()
                     picam2.stop()
                     Camera_Version()
-                    pygame.display.set_caption('Action ' + cameras[Pi_Cam])
+                     
+                     
                     # restart circular buffer
                     start_buffer()
                     if camera == 0:
@@ -1590,9 +1601,9 @@ while True:
               except:
                   pass
 
-            # external input triggers to RECORD
+            # external input trigger to RECORD
             if use_gpio == 1:
-                if button_e_trig1.is_pressed or button_e_trig2.is_pressed:
+                if button_e_trig1.is_pressed:
                     record = 1
                 
             # detection of motion
@@ -1613,8 +1624,13 @@ while True:
                         encoding = True
                         print("New Motion", timestamp)
                         image3 = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
+                        # sound buzzer
+                        if use_gpio == 1 and use_buzz == 1:
+                            buzzer.value = 0.5
                     ltime = time.time()
                     detect = 1
+                    if use_gpio == 1 and use_buzz == 2:
+                        buzzer.value = 0.1
                     # trigger external camera
                     if ES > 0 and use_gpio == 1: 
                         led_s_focus.on()
@@ -1637,6 +1653,8 @@ while True:
                     st = os.statvfs("/run/shm/")
                     freeram = (st.f_bavail * st.f_frsize)/1100000
                     record = 0
+                    if use_gpio == 1:
+                        buzzer.value = 0 
                   
                 else:
                     if Capture == 1 and menu == -1:
@@ -1998,7 +2016,8 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                        pygame.display.set_caption('Action ' + cameras[Pi_Cam])
+                         
+                         
                         # restart circular buffer
                         start_buffer()
                         if camera == 1:
@@ -2095,7 +2114,8 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                        pygame.display.set_caption('Action ' + cameras[Pi_Cam])
+                         
+                         
                         for d in range(0,10):
                             button(0,d,0)
                         text(0,7,5,0,1,"Meter",14,7)
@@ -2154,7 +2174,8 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                        pygame.display.set_caption('Action ' + cameras[Pi_Cam] + ' : ' + str(camera))
+                         
+                        #pygame.display.set_caption('Action ' + cameras[Pi_Cam] + ' : ' + str(camera))
                         for d in range(0,10):
                             button(0,d,0)
                         if Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6:
@@ -2276,6 +2297,8 @@ while True:
                         text(0,3,3,1,1,str(m_alpha),14,7)
                         text(0,4,2,0,1,"CLEAR Mask",14,7)
                         text(0,4,3,1,1," 0       1  ",14,7)
+                        text(0,9,2,0,1,"BUZZER",14,7)
+                        text(0,9,3,1,1,str(use_buzz),14,7)
                         text(0,10,1,0,1,"MAIN MENU",14,7)                        
 
                     elif g == 6: 
@@ -2299,8 +2322,17 @@ while True:
                             image = pygame.image.load(Jpegs[q])
                             cropped = pygame.transform.scale(image, (pre_width,pre_height))
                             windowSurfaceObj.blit(cropped, (0, 0))
+                            mp4 = Jpegs[q][:-4] + ".mp4"
+                            cap = cv2.VideoCapture(mp4)
+                            if not cap.isOpened():
+                                time.sleep(0.1)
+                            else:
+                                fpsv = cap.get(cv2.CAP_PROP_FPS)
+                                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                                duration = frame_count / fpsv if fpsv else 0
+                                cap.release()
                             fontObj = pygame.font.Font(None, 25)
-                            msgSurfaceObj = fontObj.render(str(Jpegs[q]), False, (255,255,0))
+                            msgSurfaceObj = fontObj.render(str(mp4) + " : " + str(int(duration)) + "s", False, (255,255,0))
                             msgRectobj = msgSurfaceObj.get_rect()
                             msgRectobj.topleft = (10,10)
                             windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
@@ -2429,7 +2461,8 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                        pygame.display.set_caption('Action ' + cameras[Pi_Cam])
+                         
+                         
                         for d in range(0,10):
                             button(0,d,0)
                         text(0,0,5,0,1,"fps",14,7)
@@ -2486,7 +2519,8 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                        pygame.display.set_caption('Action ' + cameras[Pi_Cam] + ' : ' + str(camera))
+                         
+                        #pygame.display.set_caption('Action ' + cameras[Pi_Cam] + ' : ' + str(camera))
                         for d in range(0,10):
                             button(0,d,0)
                         if Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6:
@@ -3246,7 +3280,8 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                        pygame.display.set_caption('Action ' + cameras[Pi_Cam])
+                         
+                         
                         # restart circular buffer
                         start_buffer()
                         if camera == 0:
@@ -3279,17 +3314,22 @@ while True:
 
                   elif g == 7 and camera_sw == 1:
                     # SWITCH to CAMERA 2 HOUR
-                    if h == 1 and event.button == 3:
+                    if (h == 1 and event.button == 3) or (h == 0 and event.button == 4):
                         on_hour +=1
                         if on_hour > 23:
                             on_hour = 0
-
-                    elif h == 0 and event.button == 3:
+                    elif (h == 0 and event.button == 3)  or (h == 0 and event.button == 5):
                         on_hour -=1
                         if on_hour < 0:
                             on_hour = 23
-                            
-                    elif h == 1:
+                    elif h == 1 and event.button == 5:
+                        on_mins -=1
+                        if on_mins  < 0:
+                            on_hour -= 1
+                            on_mins = 59
+                            if on_hour < 0:
+                                on_hour = 23
+                    elif h == 1 or (h == 1 and event.button == 4):
                         on_mins +=1
                         if on_mins > 59:
                             on_mins = 0
@@ -3326,24 +3366,32 @@ while True:
 
                   elif g == 8 and camera_sw == 1:
                     # SWITCH to CAMERA 1 HOUR
-                    if h == 1 and event.button == 3:
+                    if (h == 1 and event.button == 3) or (h == 0 and event.button == 4):
                         of_hour +=1
                         if of_hour > 23:
                             of_hour = 0
 
-                    elif h == 0 and event.button == 3:
+                    elif (h == 0 and event.button == 3) or (h == 0 and event.button == 5):
                         of_hour -=1
                         if of_hour < 0:
                             of_hour = 23
                             
-                    elif h == 1:
+                    elif h == 1 and event.button == 5:
+                        of_mins -=1
+                        if of_mins  < 0:
+                            of_hour -= 1
+                            of_mins = 59
+                            if of_hour < 0:
+                                of_hour = 23
+                            
+                    elif h == 1 or (h == 1 and event.button == 4):
                         of_mins +=1
                         if of_mins > 59:
                             of_mins = 0
                             of_hour += 1
                             if of_hour > 23:
                                 of_hour = 0
-                    elif h == 0:
+                    elif h == 0 :
                         of_mins -=1
                         if of_mins  < 0:
                             of_hour -= 1
@@ -3396,7 +3444,18 @@ while True:
                         nmask = pygame.transform.rotate(nmask, 270)
                         nmask = pygame.transform.flip(nmask, True, False)
                         pygame.image.save(nmask,h_user + '/CMask.bmp')
-                        mask,change = MaskChange()                                        
+                        mask,change = MaskChange()
+                                                            
+                  elif g == 9:
+                    # BUZZER
+                    if (h == 1 and event.button == 1) or event.button == 4:
+                        use_buzz +=1
+                        use_buzz = min(use_buzz,2)
+                    else:
+                        use_buzz -=1
+                        use_buzz = max(use_buzz,0)
+                    text(0,9,3,1,1,str(use_buzz),14,7)
+                    save_config = 1
                     
 # MENU 4 ====================================================================================================
                 elif menu == 4:
@@ -3431,8 +3490,18 @@ while True:
                             image = pygame.image.load(Jpegs[q])
                             cropped = pygame.transform.scale(image, (pre_width,pre_height))
                             windowSurfaceObj.blit(cropped, (0, 0))
+                            duration = 0
+                            mp4 = Jpegs[q][:-4] + ".mp4"
+                            cap = cv2.VideoCapture(mp4)
+                            if not cap.isOpened():
+                                time.sleep(0.1)
+                            else:
+                                fpsv = cap.get(cv2.CAP_PROP_FPS)
+                                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                                duration = frame_count / fpsv if fpsv else 0
+                                cap.release()
                             fontObj = pygame.font.Font(None, 25)
-                            msgSurfaceObj = fontObj.render(str(Jpegs[q]), False, (255,255,0))
+                            msgSurfaceObj = fontObj.render(str(mp4) + " : " + str(int(duration)) + "s", False, (255,255,0))
                             msgRectobj = msgSurfaceObj.get_rect()
                             msgRectobj.topleft = (10,10)
                             windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
@@ -3575,8 +3644,18 @@ while True:
                         image = pygame.image.load(Videos[q][:-4] + ".jpg")
                         cropped = pygame.transform.scale(image, (pre_width,pre_height))
                         windowSurfaceObj.blit(cropped, (0, 0))
+                        duration = 0
+                        mp4 = Jpegs[q][:-4] + ".mp4"
+                        cap = cv2.VideoCapture(mp4)
+                        if not cap.isOpened():
+                            time.sleep(0.1)
+                        else:
+                            fpsv = cap.get(cv2.CAP_PROP_FPS)
+                            frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                            duration = frame_count / fpsv if fpsv else 0
+                            cap.release()
                         fontObj = pygame.font.Font(None, 25)
-                        msgSurfaceObj = fontObj.render(str(Videos[q]), False, (255,255,0))
+                        msgSurfaceObj = fontObj.render(str(mp4) + " : " + str(int(duration)) + "s", False, (255,255,0))
                         msgRectobj = msgSurfaceObj.get_rect()
                         msgRectobj.topleft = (10,10)
                         windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
@@ -3678,8 +3757,18 @@ while True:
                                     image = pygame.image.load(Jpegs[q])
                                     cropped = pygame.transform.scale(image, (pre_width,pre_height))
                                     windowSurfaceObj.blit(cropped, (0, 0))
+                                    duration = 0
+                                    mp4 = Jpegs[q][:-4] + ".mp4"
+                                    cap = cv2.VideoCapture(mp4)
+                                    if not cap.isOpened():
+                                        time.sleep(0.1)
+                                    else:
+                                        fpsv = cap.get(cv2.CAP_PROP_FPS)
+                                        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                                        duration = frame_count / fpsv if fpsv else 0
+                                        cap.release()
                                     fontObj = pygame.font.Font(None, 25)
-                                    msgSurfaceObj = fontObj.render(str(Jpegs[q]), False, (255,0,0))
+                                    msgSurfaceObj = fontObj.render(str(mp4) + " : " + str(int(duration)) + "s", False, (255,255,0))
                                     msgRectobj = msgSurfaceObj.get_rect()
                                     msgRectobj.topleft = (10,10)
                                     windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
@@ -4465,6 +4554,7 @@ while True:
                 config[78] = ir_of_mins1
                 config[79] = IRF1
                 config[80] = IRF_on1
+                config[81] = use_buzz
 
               
                 with open(config_file, 'w') as f:
