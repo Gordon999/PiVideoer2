@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.23"
+version = "1.24"
 
 import time
 import cv2
@@ -49,14 +49,14 @@ import datetime
 
 # Your Location
 you = ephem.Observer()
-you.lat       = '51.0000000' # set your location latitude
+you.lat       = '51.0000000'  # set your location latitude
 you.lon       = '-1.0000000' # set your location longtitude
 you.elevation = 100          # set your location height in metres
 UTC_offset    = 0            # set your local time offset to UTC in hours
 on_sunrise    = 0            # set to 1 to only start recording at sunrise 
-sr_offset     = -1           # offset to start recording before/after sunrise (if on_surise = 1), -1 = sunrise - 1hr
+sr_offset     = -0.5         # offset in hours to start recording before/after sunrise (if on_sunrise = 1), -1 = sunrise - 1hr
 sd_mode       = 0            # shutdown mode, 0 = set time, 1 = use sunset *
-sd_offset     = 1            # offset in hours to shutdown after/before sunset (if sd_mode = 1) , 1 = sunset + 1 hr *
+ss_offset     = 0.5          # offset in hours to shutdown after/before sunset (if sd_mode = 1) , 1 = sunset + 1 hr 
 
 # * adjustable whilst running and saved in config
 
@@ -88,12 +88,12 @@ ir_light   = 13
 
 # buzzer
 e_buzz     = 12
-use_buzz   = 0       # enable buzzer on capture, 1 on starting video, 2 on detection *
+use_buzz   = 1       # enable buzzer on capture, 1 on starting video, 2 on detection *
 
 # fan ctrl gpio (if use_gpio = 1) This is not the Pi5 active cooler !!
 # DISABLE Pi FAN CONTROL in Preferences > Performance to GPIO 14 !!
 fan        = 14
-fan_ctrl   = 0  # 0 for OFF.
+fan_ctrl   = 1  # 0 for OFF.
 
 # enable watchdog
 watch = False
@@ -324,7 +324,7 @@ if not os.path.exists(config_file):
               check_time,sd_hour,vformat,threshold2,col_filter,nr,pre_frames,auto_time,ram_limit,mp4_fps,mp4_anno,SD_F_Act,dspeed,IRF,camera,
               mode1,speed1,gain1,brightness1,contrast1,awb1,int(red1*10),int(blue1*10),meter1,ev1,denoise1,quality1,sharpness1,saturation1,
               fps1,AF_f_mode1,AF_focus1,AF_f_mode,AF_focus,IRF_on,on_hour,of_hour,on_mins,of_mins,ir_on_hour,ir_of_hour,ir_on_mins,ir_of_mins,
-              camera_sw,AF_f_spot,AF_f_spot1,ir_on_hour1,ir_of_hour1,ir_on_mins1,ir_of_mins1,IRF1,IRF_on1,use_buzz,sd_mode,sd_mins,sd_offset]
+              camera_sw,AF_f_spot,AF_f_spot1,ir_on_hour1,ir_of_hour1,ir_on_mins1,ir_of_mins1,IRF1,IRF_on1,use_buzz,sd_mode,sd_mins,ss_offset_hr]
     with open(config_file, 'w') as f:
         for item in defaults:
             f.write("%s\n" % item)
@@ -381,6 +381,7 @@ mp4_anno    = config[39]
 SD_F_Act    = config[40]
 dspeed      = config[41]
 IRF         = config[42]
+#camera      = config[43]
 mode1       = config[44]
 speed1      = config[45]
 gain1       = config[46]
@@ -421,7 +422,7 @@ IRF_on1     = config[80]
 use_buzz    = config[81]
 sd_mode     = config[82]
 sd_mins     = config[83]
-sd_offset   = config[84]
+ss_offset_hr   = config[84]
 
 if camera_sw == 3:
     camera = 1
@@ -440,21 +441,27 @@ ir_of_time  = (ir_of_hour * 60) + ir_of_mins
 ir_on_time1 = (ir_on_hour1 * 60) + ir_on_mins1
 ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
 
-
+UTC_offset_hr = int(UTC_offset)
+UTC_offset_mn = UTC_offset - UTC_offset_hr
+sr_offset_hr  = int(sr_offset)
+sr_offset_mn  = sr_offset - sr_offset_hr
+ss_offset_hr  = int(ss_offset)
+ss_offset_mn  = ss_offset - ss_offset_hr
 
 def suntimes():
     global sr_seconds,ss_seconds,now_seconds,ir_on_hour,ir_on_mins,ir_of_hour,ir_of_mins,menu,synced,Pi_Cam
     global on_hour,on_mins,of_hour,of_mins,camera_sw,on_time,of_time,IRF,IRF1,ir_on_time,ir_of_time,ir_on_time1,ir_of_time1
-    global ir_on_hour1,ir_on_mins1,ir_of_hour1,ir_of_mins1,ss_of_time,ss_of_hour,ss_of_mins,ss_on_time,ss_on_hour,ss_on_mins,sd_offset,sr_offset
+    global ir_on_hour1,ir_on_mins1,ir_of_hour1,ir_of_mins1,ss_of_time,ss_of_hour,ss_of_mins,ss_on_time,ss_on_hour,ss_on_mins
+    global ss_offset_hr,sr_offset_hr,UTC_offset_mn,UTC_offset_hr,ss_offset,sr_offset
     sun = ephem.Sun()
     r1 = str(you.next_rising(sun))
     sunrise = datetime.datetime.strptime(str(r1), '%Y/%m/%d %H:%M:%S')
     sr_timedelta = sunrise - datetime.datetime(2020, 1, 1)
-    sr_seconds = sr_timedelta.total_seconds() + (int(UTC_offset) * 3600)
+    sr_seconds = sr_timedelta.total_seconds() + (UTC_offset * 3600)
     s1 = str(you.next_setting(sun))
     sunset = datetime.datetime.strptime(str(s1), '%Y/%m/%d %H:%M:%S')
     ss_timedelta = sunset - datetime.datetime(2020, 1, 1)
-    ss_seconds = ss_timedelta.total_seconds() + (int(UTC_offset) * 3600)
+    ss_seconds = ss_timedelta.total_seconds() + (UTC_offset * 3600)
     time1 = r1.split(" ")
     time1a = time1[1].split(":")
     time2 = s1.split(" ")
@@ -464,38 +471,62 @@ def suntimes():
     now_seconds = a_timedelta.total_seconds()
     
     # sunrise time
-    ss_on_hour = int(time1a[0]) + int(UTC_offset)
-    # adjust to start recording before / after sunrise
-    ss_on_hour += sr_offset
+    ss_on_hour = int(time1a[0]) + int(UTC_offset_hr)
+    ss_on_hour += sr_offset_hr
+    ss_on_mins = int(time1a[1]) + int(UTC_offset_mn * 60)
+    ss_on_mins += int(sr_offset_mn * 60)
+    if ss_on_mins > 59:
+        ss_on_mins -= 60
+        ss_on_hour += 1
+    if ss_on_mins < 0:
+        ss_on_mins += 60
+        ss_on_hour -= 1
     if ss_on_hour > 23:
         ss_on_hour -= 24
     if ss_on_hour < 0:
         ss_on_hour += 24
-    ss_on_mins = int(time1a[1])
-    ss_on_time  = (ss_on_hour * 60) + ss_on_mins
+    ss_on_time = (ss_on_hour * 60) + ss_on_mins
         
     # sunset time
-    ss_of_hour = int(time2a[0]) + int(UTC_offset)
+    ss_of_hour = int(time2a[0]) + int(UTC_offset_hr)
+    ss_of_mins  = int(time2a[1]) + int(UTC_offset_mn * 60)
+    if ss_of_mins > 59:
+        ss_of_mins -= 60
+        ss_of_hour += 1
+    if ss_of_mins < 0:
+        ss_of_mins += 60
+        ss_of_hour -= 1
     if ss_of_hour > 23:
         ss_of_hour -= 24
     if ss_of_hour < 0:
         ss_of_hour += 24
-    ss_of_mins  = int(time2a[1])
     ss_of_time  = (ss_of_hour * 60) + ss_of_mins
     
     if IRF == 0:
-        ir_on_hour = int(time1a[0]) + int(UTC_offset)
+        ir_on_hour = int(time1a[0]) + int(UTC_offset_hr)
+        ir_on_mins = int(time1a[1]) + int(UTC_offset_mn * 60)
+        if ir_on_mins > 59:
+            ir_on_mins -= 60
+            ir_on_hour += 1
+        if ir_on_mins < 0:
+            ir_on_mins += 60
+            ir_on_hour -= 1
         if ir_on_hour > 23:
             ir_on_hour -= 24
         if ir_on_hour < 0:
             ir_on_hour += 24
-        ir_on_mins = int(time1a[1])
-        ir_of_hour = int(time2a[0]) + int(UTC_offset)
+        ir_of_hour = int(time2a[0]) + int(UTC_offset_hr)
+        ir_of_mins  = int(time2a[1]) + int(UTC_offset_mn * 60)
+        if ir_of_mins > 59:
+            ir_of_mins -= 60
+            ir_of_hour += 1
+        if ir_of_mins < 0:
+            ir_of_mins += 60
+            ir_of_hour -= 1
         if ir_of_hour > 23:
             ir_of_hour -= 24
         if ir_of_hour < 0:
             ir_of_hour += 24
-        ir_of_mins  = int(time2a[1])
         ir_on_time  = (ir_on_hour * 60) + ir_on_mins
         ir_of_time  = (ir_of_hour * 60) + ir_of_mins
         if menu == 2:
@@ -521,18 +552,30 @@ def suntimes():
                 text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
 
     if IRF1 == 0:
-        ir_on_hour1 = int(time1a[0]) + int(UTC_offset)
+        ir_on_hour1 = int(time1a[0]) + int(UTC_offset_hr)
+        ir_on_mins1 = int(time1a[1]) + int(UTC_offset_mn * 60)
+        if ir_on_mins1 > 59:
+            ir_on_mins1 -= 60
+            ir_on_hour1 += 1
+        if ir_on_mins1 < 0:
+            ir_on_mins1 += 60
+            ir_on_hour1 -= 1
         if ir_on_hour1 > 23:
             ir_on_hour1 -= 24
         if ir_on_hour1 < 0:
             ir_on_hour1 += 24
-        ir_on_mins1 = int(time1a[1])
-        ir_of_hour1 = int(time2a[0]) + int(UTC_offset)
+        ir_of_hour1 = int(time2a[0]) + int(UTC_offset_hr)
+        ir_of_mins1 = int(time2a[1]) + int(UTC_offset_mn * 60)
+        if ir_of_mins1 > 59:
+            ir_of_mins1 -= 60
+            ir_of_hour1 += 1
+        if ir_of_mins1 < 0:
+            ir_of_mins1 += 60
+            ir_of_hour1 -= 1
         if ir_of_hour1 > 23:
             ir_of_hour1 -= 24
         if ir_of_hour1 < 0:
             ir_of_hour1 += 24
-        ir_of_mins1  = int(time2a[1])
         ir_on_time1 = (ir_on_hour1 * 60) + ir_on_mins1
         ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
         if menu == 7:
@@ -558,18 +601,32 @@ def suntimes():
                 text(0,2,0,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
                 
     if camera_sw == 0:
-        on_hour = int(time1a[0]) + int(UTC_offset)
+        on_hour = int(time1a[0]) + int(UTC_offset_hr)
+        on_mins = int(time1a[1]) + int(UTC_offset_mn * 60)
+        if on_mins > 59:
+            on_mins -= 60
+            on_hour += 1
+        if on_mins < 0:
+            on_mins += 60
+            on_hour -= 1
         if on_hour > 23:
             on_hour -= 24
         if on_hour < 0:
             on_hour += 24
-        on_mins = int(time1a[1])
-        of_hour = int(time2a[0]) + int(UTC_offset)
+            
+        of_hour = int(time2a[0]) + int(UTC_offset_hr)
+        of_mins = int(time2a[1]) + int(UTC_offset_mn * 60)
+        if of_mins > 59:
+            of_mins -= 60
+            of_hour += 1
+        if of_mins < 0:
+            of_mins += 60
+            of_hour -= 1
         if of_hour > 23:
             of_hour -= 24
         if of_hour < 0:
             of_hour += 24
-        of_mins = int(time2a[1])
+            
         on_time = (on_hour * 60) + on_mins
         of_time = (of_hour * 60) + of_mins
         if menu == 3 and cam2 != "1":
@@ -723,12 +780,18 @@ suntimes()
 
 # set sunset shutdown times
 if sd_mode == 1:    
-    sd_hour = ss_of_hour + sd_offset
+    sd_hour = ss_of_hour + ss_offset_hr
+    sd_mins = ss_of_mins + int(ss_offset_mn * 60)
+    if sd_mins > 59:
+        sd_mins -= 60
+        sd_hour += 1
+    if sd_mins < 0:
+        sd_mins += 60
+        sd_hour -= 1
     if sd_hour > 23:
-        sd_hour -=24
-    elif sd_hour < 0:
-        sd_hour +=24
-    sd_mins = ss_of_mins
+        sd_hour -= 24
+    if sd_hour < 0:
+        sd_hour += 24
     sd_time = (sd_hour * 60) + sd_mins
 
 print(Pi_Cam,cam1,cam2)
@@ -2497,10 +2560,7 @@ while True:
                         if sd_mode == 0:
                             text(0,10,3,1,1,"SD_Set",14,7)
                         else:
-                            if sd_offset >= 0:
-                                text(0,10,3,1,1,"Sunset +" + str(sd_offset) + "h",14,7)
-                            else:
-                                text(0,10,3,1,1,"Sunset " + str(sd_offset) + "h",14,7)
+                            text(0,10,3,1,1,"Sunset",14,7)
                         USB_Files  = []
                         USB_Files  = (os.listdir(m_user))
                         if len(USB_Files) > 0:
@@ -4105,15 +4165,23 @@ while True:
                         sd_hour = old_sd_hour
                         sd_time = old_sd_time
                     else:
-                        text(0,10,3,1,1,"Sunset +" + str(sd_offset) + "h",14,7)
+                        text(0,10,3,1,1,"Sunset",14,7)
                         old_sd_mins = sd_mins
                         old_sd_hour = sd_hour
                         old_sd_time = sd_time
-                        sd_time = ss_of_time
-                        sd_hour = ss_of_hour + sd_offset
+                        sd_hour = ss_of_hour + ss_offset_hr
+                        sd_mins = ss_of_mins + int(ss_offset_mn * 60)
+                        if sd_mins > 59:
+                            sd_mins -= 60
+                            sd_hour += 1
+                        if sd_mins < 0:
+                            sd_mins += 60
+                            sd_hour -= 1
                         if sd_hour > 23:
-                            sd_hour = 0
-                        sd_mins = ss_of_mins
+                            sd_hour -= 24
+                        if sd_hour < 0:
+                           sd_hour += 24
+                           sd_time = (sd_hour * 60) + sd_mins
                     if synced == 1:
                         if sd_mins > 9:
                             text(0,9,3,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
@@ -4127,21 +4195,21 @@ while True:
                     start_up = time.monotonic()
                     save_config = 1
                     
-                  elif g == 10 and event.button == 3 and sd_mode == 1:
+                  elif g == 12 and event.button == 3 and sd_mode == 1:
                     # SHUTDOWN OFFSET
                     if h == 1:
-                        sd_offset +=1
-                        if sd_offset > 12:
-                            sd_offset = -12
+                        ss_offset_hr +=1
+                        if ss_offset_hr > 12:
+                            ss_offset_hr = -12
                     elif h == 0:
-                        sd_offset -=1
-                        if sd_offset < -12:
-                            sd_offset = 12
-                    if sd_offset >= 0:
-                        text(0,10,3,1,1,"Sunset +" + str(sd_offset) + "h",14,7)
+                        ss_offset_hr -=1
+                        if ss_offset_hr < -12:
+                            ss_offset_hr = 12
+                    if ss_offset_hr >= 0:
+                        text(0,10,3,1,1,"Sunset +" + str(ss_offset_hr) + "h",14,7)
                     else:
-                        text(0,10,3,1,1,"Sunset " + str(sd_offset) + "h",14,7)
-                    sd_hour = ss_of_hour + sd_offset
+                        text(0,10,3,1,1,"Sunset " + str(ss_offset_hr) + "h",14,7)
+                    sd_hour = ss_of_hour + ss_offset_hr
                     if sd_hour > 23:
                         sd_hour -=24
                     elif sd_hour < 0:
@@ -4710,7 +4778,7 @@ while True:
                 config[81] = use_buzz
                 config[82] = sd_mode
                 config[83] = sd_mins
-                config[84] = sd_offset
+                config[84] = ss_offset_hr
               
                 with open(config_file, 'w') as f:
                     for item in config:
