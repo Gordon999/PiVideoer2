@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.24"
+version = "1.25"
 
 import time
 import cv2
@@ -49,14 +49,14 @@ import datetime
 
 # Your Location
 you = ephem.Observer()
-you.lat       = '51.0000000'  # set your location latitude
+you.lat       = '51.0000000' # set your location latitude
 you.lon       = '-1.0000000' # set your location longtitude
 you.elevation = 100          # set your location height in metres
 UTC_offset    = 0            # set your local time offset to UTC in hours
 on_sunrise    = 0            # set to 1 to only start recording at sunrise 
-sr_offset     = -0.5         # offset in hours to start recording before/after sunrise (if on_sunrise = 1), -1 = sunrise - 1hr
+sr_offset     = -0.5         # offset in hours to start recording before/after sunrise (if on_sunrise = 1), -0.5 = sunrise - 30mins
 sd_mode       = 0            # shutdown mode, 0 = set time, 1 = use sunset *
-ss_offset     = 0.5          # offset in hours to shutdown after/before sunset (if sd_mode = 1) , 1 = sunset + 1 hr 
+ss_offset     = 0.5          # offset in hours to shutdown after/before sunset (if sd_mode = 1) , 0.5 = sunset + 30mins 
 
 # * adjustable whilst running and saved in config
 
@@ -324,7 +324,7 @@ if not os.path.exists(config_file):
               check_time,sd_hour,vformat,threshold2,col_filter,nr,pre_frames,auto_time,ram_limit,mp4_fps,mp4_anno,SD_F_Act,dspeed,IRF,camera,
               mode1,speed1,gain1,brightness1,contrast1,awb1,int(red1*10),int(blue1*10),meter1,ev1,denoise1,quality1,sharpness1,saturation1,
               fps1,AF_f_mode1,AF_focus1,AF_f_mode,AF_focus,IRF_on,on_hour,of_hour,on_mins,of_mins,ir_on_hour,ir_of_hour,ir_on_mins,ir_of_mins,
-              camera_sw,AF_f_spot,AF_f_spot1,ir_on_hour1,ir_of_hour1,ir_on_mins1,ir_of_mins1,IRF1,IRF_on1,use_buzz,sd_mode,sd_mins,ss_offset_hr]
+              camera_sw,AF_f_spot,AF_f_spot1,ir_on_hour1,ir_of_hour1,ir_on_mins1,ir_of_mins1,IRF1,IRF_on1,use_buzz,sd_mode,sd_mins]
     with open(config_file, 'w') as f:
         for item in defaults:
             f.write("%s\n" % item)
@@ -422,7 +422,6 @@ IRF_on1     = config[80]
 use_buzz    = config[81]
 sd_mode     = config[82]
 sd_mins     = config[83]
-ss_offset_hr   = config[84]
 
 if camera_sw == 3:
     camera = 1
@@ -433,6 +432,7 @@ elif camera_sw == 2:
 
 old_sd_mins = sd_mins
 old_sd_hour = sd_hour
+sd_time     = (sd_hour * 60) + sd_mins
 old_sd_time = (sd_hour * 60) + sd_mins
 on_time     = (on_hour * 60) + on_mins
 of_time     = (of_hour * 60) + of_mins
@@ -630,7 +630,7 @@ def suntimes():
         on_time = (on_hour * 60) + on_mins
         of_time = (of_hour * 60) + of_mins
         if menu == 3 and cam2 != "1":
-            text(0,7,1,0,1,"SW 2>1 time",14,7)
+            text(0,7,1,0,1,"SW 2 to 1 time",14,7)
             if synced == 1 and cam2 != "1":
                 if on_mins > 9:
                     text(0,7,2,1,1,str(on_hour) + ":" + str(on_mins),14,7)
@@ -641,7 +641,7 @@ def suntimes():
                     text(0,7,0,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                 else:
                     text(0,7,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
-            text(0,8,1,0,1,"SW 1>2 time",14,7)
+            text(0,8,1,0,1,"SW 1 to 2 time",14,7)
             if synced == 1 and cam2 != "1":
                 if of_mins > 9:
                     text(0,8,2,1,1,str(of_hour) + ":" + str(of_mins),14,7)
@@ -1495,7 +1495,6 @@ while True:
                             
           
         # shutdown if shutdown time reached and clocked synced
-        print((hour* 60) + mins,sd_time,time.monotonic() - start_up, synced,encoding)
         if (hour* 60) + mins >= sd_time and sd_time != 0 and time.monotonic() - start_up > 60 and synced == 1 and not encoding:
             # EXIT and SHUTDOWN
             if trace > 0:
@@ -2201,6 +2200,8 @@ while True:
                         text(0,8,3,1,1,str(dspeed),14,7)
                         text(0,9,2,0,1,"Noise Red'n",14,7)
                         text(0,9,3,1,1,str(noise_filters[nr]),14,7)
+                        text(0,10,2,0,1,"BUZZER",14,7)
+                        text(0,10,3,1,1,str(use_buzz),14,7)
                         text(0,11,1,0,1,"MAIN MENU",14,7)
 
                     elif g == 2 and event.button == 3: # right click
@@ -2379,7 +2380,7 @@ while True:
                                 clr = 2
                             else:
                                 clr = 3
-                            text(0,7,1,0,1,"SW 2>1 time",14,7)
+                            text(0,7,1,0,1,"SW 2 to 1 time",14,7)
                             if synced == 1 and cam2 != "1":
                                 if on_mins > 9:
                                     text(0,7,clr,1,1,str(on_hour) + ":" + str(on_mins),14,7)
@@ -2390,7 +2391,7 @@ while True:
                                     text(0,7,0,1,1,str(on_hour) + ":" + str(on_mins),14,7)
                                 else:
                                     text(0,7,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
-                            text(0,8,1,0,1,"SW 1>2 time",14,7)
+                            text(0,8,1,0,1,"SW 1 to 2 time",14,7)
                             if synced == 1 and cam2 != "1":
                                 if of_mins > 9:
                                     text(0,8,clr,1,1,str(of_hour) + ":" + str(of_mins),14,7)
@@ -2405,8 +2406,30 @@ while True:
                         text(0,3,3,1,1,str(m_alpha),14,7)
                         text(0,4,2,0,1,"CLEAR Mask",14,7)
                         text(0,4,3,1,1," 0       1  ",14,7)
-                        text(0,9,2,0,1,"BUZZER",14,7)
-                        text(0,9,3,1,1,str(use_buzz),14,7)
+                        
+                        if sd_mode == 1:
+                            text(0,9,2,0,1,"Start Rec Time",14,7)
+                            if synced == 1:
+                                if ss_on_mins > 9:
+                                    text(0,9,3,1,1,str(ss_on_hour) + ":" + str(ss_on_mins),14,7)
+                                else:
+                                    text(0,9,3,1,1,str(ss_on_hour) + ":0" + str(ss_on_mins),14,7)
+                            else:
+                                if ss_on_mins > 9:
+                                    text(0,9,0,1,1,str(ss_on_hour) + ":" + str(ss_on_mins),14,7)
+                                else:
+                                    text(0,9,0,1,1,str(ss_on_hour) + ":0" + str(ss_on_mins),14,7)
+                            text(0,10,2,0,1,"Shutdown Time",14,7)
+                            if synced == 1:
+                                if sd_mins > 9:
+                                    text(0,10,3,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
+                                else:
+                                    text(0,10,3,1,1,str(sd_hour) + ":0" + str(sd_mins),14,7)
+                            else:
+                                if sd_mins > 9:
+                                    text(0,10,0,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
+                                else:
+                                    text(0,10,0,1,1,str(sd_hour) + ":0" + str(sd_mins),14,7)
                         text(0,11,1,0,1,"MAIN MENU",14,7)                        
 
                     elif g == 6: 
@@ -2845,6 +2868,17 @@ while True:
                         nr += 1
                         nr = min(nr,2)
                     text(0,9,3,1,1,str(noise_filters[nr]),14,7)
+                    save_config = 1
+                    
+                  elif g == 10:
+                    # BUZZER
+                    if (h == 1 and event.button == 1) or event.button == 4:
+                        use_buzz +=1
+                        use_buzz = min(use_buzz,2)
+                    else:
+                        use_buzz -=1
+                        use_buzz = max(use_buzz,0)
+                    text(0,10,3,1,1,str(use_buzz),14,7)
                     save_config = 1
                     
 # MENU 1 ====================================================================================================
@@ -3398,8 +3432,7 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                         
-                         
+                        
                         # restart circular buffer
                         start_buffer()
                         if camera == 0:
@@ -3564,17 +3597,7 @@ while True:
                         pygame.image.save(nmask,h_user + '/CMask.bmp')
                         mask,change = MaskChange()
                                                             
-                  elif g == 9:
-                    # BUZZER
-                    if (h == 1 and event.button == 1) or event.button == 4:
-                        use_buzz +=1
-                        use_buzz = min(use_buzz,2)
-                    else:
-                        use_buzz -=1
-                        use_buzz = max(use_buzz,0)
-                    text(0,9,3,1,1,str(use_buzz),14,7)
-                    save_config = 1
-                    
+                                     
 # MENU 4 ====================================================================================================
                 elif menu == 4:
                   if g == 0:
@@ -4778,7 +4801,6 @@ while True:
                 config[81] = use_buzz
                 config[82] = sd_mode
                 config[83] = sd_mins
-                config[84] = ss_offset_hr
               
                 with open(config_file, 'w') as f:
                     for item in config:
