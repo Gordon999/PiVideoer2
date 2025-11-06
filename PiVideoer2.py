@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.25"
+version = "1.28"
 
 import time
 import cv2
@@ -40,7 +40,7 @@ import sys
 import random
 from picamera2 import Picamera2, Preview, MappedArray
 from picamera2.encoders import H264Encoder
-from picamera2.outputs import CircularOutput
+from picamera2.outputs import CircularOutput2, PyavOutput
 from libcamera import controls
 import threading
 from queue import Queue
@@ -49,13 +49,13 @@ import datetime
 
 # Your Location
 you = ephem.Observer()
-you.lat       = '51.0000000' # set your location latitude
-you.lon       = '-1.0000000' # set your location longtitude
+you.lat       = '51.6000000' # set your location latitude
+you.lon       = '-1.0500000' # set your location longtitude
 you.elevation = 100          # set your location height in metres
 UTC_offset    = 0            # set your local time offset to UTC in hours
-on_sunrise    = 0            # set to 1 to only start recording at sunrise 
+on_sunrise    = 1            # set to 1 to only start recording at sunrise 
 sr_offset     = -0.5         # offset in hours to start recording before/after sunrise (if on_sunrise = 1), -0.5 = sunrise - 30mins
-sd_mode       = 0            # shutdown mode, 0 = set time, 1 = use sunset *
+sd_mode       = 1            # shutdown mode, 0 = set time, 1 = use sunset *
 ss_offset     = 0.5          # offset in hours to shutdown after/before sunset (if sd_mode = 1) , 0.5 = sunset + 30mins 
 
 # * adjustable whilst running and saved in config
@@ -114,6 +114,7 @@ mp4_anno      = 1       # mp4_annotate MP4s with date and time , 1 = yes, 0 = no
 SD_F_Act      = 0       # Action on SD FULL, 0 = STOP, 1 = DELETE OLDEST VIDEO, 2 = COPY TO USB (if fitted) *
 interval      = 0       # seconds of wait between capturing Pictures / TIMELAPSE (set threshold to 0)*
 v_length      = 15000   # video length in mS *
+bitrate       = 5000000 # video bitrate
 
 # setup for 1st camera
 mode          = 1       # set camera mode *
@@ -231,6 +232,7 @@ stop_rec      = 0
 rec_stop      = 0
 show_vid      = 1
 old_show_vid  = show_vid
+pref          = pre_frames * 1000
 
 # apply timestamp to videos
 def apply_timestamp(request):
@@ -447,6 +449,11 @@ sr_offset_hr  = int(sr_offset)
 sr_offset_mn  = sr_offset - sr_offset_hr
 ss_offset_hr  = int(ss_offset)
 ss_offset_mn  = ss_offset - ss_offset_hr
+
+# check current hour
+now = datetime.datetime.now()
+hour = int(now.strftime("%H"))
+mins = int(now.strftime("%M"))
 
 def suntimes():
     global sr_seconds,ss_seconds,now_seconds,ir_on_hour,ir_on_mins,ir_of_hour,ir_of_mins,menu,synced,Pi_Cam
@@ -866,7 +873,7 @@ for x in range(0,10):
             foc_sub3 = x
 
 def start_buffer():
-    global lores_width,lores_height,vid_width,vid_height,picam2,encoder,encoding,ltime,Pi_Cam
+    global lores_width,lores_height,vid_width,vid_height,picam2,encoder,encoding,ltime,Pi_Cam,bitrate,circular,pre_frames,camera
     # start circular buffer
     lsize = (lores_width,lores_height)
     picam2 = Picamera2(camera)
@@ -874,11 +881,11 @@ def start_buffer():
                                              lores={"size": lsize, "format": "YUV420"},
                                              display="lores")
     picam2.configure(video_config)
-    encoder = H264Encoder(4000000, repeat=True)
-    encoder.output = CircularOutput(buffersize = pre_frames * fps)
+    encoder = H264Encoder(bitrate, repeat=True)
+    pref = pre_frames * 1000
+    circular = CircularOutput2(buffer_duration_ms=pref)
     picam2.pre_callback = apply_timestamp
-    picam2.start()
-    picam2.start_encoder(encoder)
+    picam2.start_recording(encoder, circular)
     encoding = False
     ltime = 0
 
@@ -1399,7 +1406,8 @@ while True:
                     if menu == 3:
                         text(0,6,1,0,1,"Camera: " + str(camera + 1),14,7)
                         text(0,6,3,1,1,str(camera_sws[camera_sw]),14,7)
-                    picam2.stop_encoder()
+                    picam2.stop_recording()
+                    circular = CircularOutput2(buffer_duration_ms=pref)
                     picam2.close()
                     picam2.stop()
                     Camera_Version()
@@ -1418,7 +1426,8 @@ while True:
                     if menu == 3:
                         text(0,6,1,0,1,"Camera: " + str(camera + 1),14,7)
                         text(0,6,3,1,1,str(camera_sws[camera_sw]),14,7)
-                    picam2.stop_encoder()
+                    picam2.stop_recording()
+                    circular = CircularOutput2(buffer_duration_ms=pref)
                     picam2.close()
                     picam2.stop()
                     Camera_Version()
@@ -1712,7 +1721,12 @@ while True:
             if use_gpio == 1:
                 if button_e_trig1.is_pressed:
                     record = 1
-                
+            
+            if encoding and menu == -1:
+                mn = int((time.monotonic() - ttime)/60)
+                sc = int((time.monotonic() - ttime) - (mn * 60))
+                text(0,0,2,1,1,("0" + str(mn))[-2:] + ":" + ("0" + str(sc))[-2:],15,0)
+                    
             # detection of motion
             if (((sar5/diff) * 100 > detection and (sar5/diff) * 100 < det_high and threshold != 0) or (time.monotonic() - timer10 > interval and timer10 != 0 and threshold == 0) or record == 1) and menu == -1:
                 if trace > 0:
@@ -1726,15 +1740,15 @@ while True:
                     if not encoding:
                         now = datetime.datetime.now()
                         timestamp = now.strftime("%y%m%d%H%M%S")
-                        encoder.output.fileoutput = "/run/shm/" + str(timestamp) + '.h264'
-                        encoder.output.start()
+                        circular.open_output(PyavOutput("/run/shm/" + timestamp +".mp4"))
                         encoding = True
                         print("New Motion", timestamp)
+                        ttime = time.monotonic()
                         image3 = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
                         # sound buzzer
                         if use_gpio == 1 and use_buzz == 1:
-                            buzzer.value = 0.5
-                    ltime = time.time()
+                            buzzer.value = 0.01
+                    ltime = time.monotonic()
                     detect = 1
                     if use_gpio == 1 and use_buzz == 2:
                         buzzer.value = 0.1
@@ -1750,10 +1764,7 @@ while True:
                     vid = 1
                     if menu == -1:
                         button(0,0,1)
-                        text(0,0,3,0,1,"CAPTURE",16,0)
-                        text(0,0,1,1,1," ",15,0)
-                        vf = str(ram_frames) + " - " + str(frames)
-                        text(0,0,3,1,1,vf,14,0)
+                        text(0,0,2,0,1,"Recording",18,3)
                     start = time.monotonic()
                     start2 = time.monotonic()
                     fx = 1
@@ -1770,13 +1781,9 @@ while True:
                     text(0,1,2,0,1,"Low Detect " + str(int((sar5/diff) * 100)) + "%",14,7)
             else:
                 # stop recording
-                if encoding and time.time() - ltime > v_length/1000:
-                    encoder.output.stop()
+                if encoding and time.monotonic() - ltime > (v_length/1000) + pre_frames:
+                    circular.close_output()
                     encoding = False
-                    # convert to mp4
-                    cmd = 'ffmpeg -framerate ' + str(mp4_fps) + ' -i ' + "/run/shm/" + str(timestamp) + '.h264 -c copy ' + "/run/shm/" + str(timestamp) + '.mp4'
-                    os.system(cmd)
-                    os.remove("/run/shm/" + str(timestamp) + '.h264')
                     if ES == 2 and use_gpio == 1:
                         led_s_trig.off()
                         led_s_focus.off()
@@ -2119,11 +2126,11 @@ while True:
                     txtvids = []
                     if camera != old_camera:
                         camera = old_camera
-                        picam2.stop_encoder()
+                        picam2.stop_recording()
+                        circular = CircularOutput2(buffer_duration_ms=pref)
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                         
                          
                         # restart circular buffer
                         start_buffer()
@@ -2219,7 +2226,8 @@ while True:
                         Capture = 0
                         old_camera = camera
                         camera = 0
-                        picam2.stop_encoder()
+                        picam2.stop_recording()
+                        circular = CircularOutput2(buffer_duration_ms=pref)
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
@@ -2279,12 +2287,12 @@ while True:
                         menu_timer  = time.monotonic()
                         old_camera = camera
                         camera = 0
-                        picam2.stop_encoder()
+                        picam2.stop_recording()
+                        circular = CircularOutput2(buffer_duration_ms=pref)
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
                          
-                        #pygame.display.set_caption('Action ' + cameras[Pi_Cam] + ' : ' + str(camera))
                         for d in range(0,10):
                             button(0,d,0)
                         if Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6:
@@ -2307,26 +2315,14 @@ while True:
                             else:
                                 clr = 3
                             if synced == 1:
-                                if ir_on_mins > 9:
-                                    text(0,1,clr,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
-                                else:
-                                    text(0,1,clr,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                                text(0,1,clr,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
                             else:
-                                if ir_on_mins > 9:
-                                    text(0,1,0,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
-                                else:
-                                    text(0,1,0,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                                text(0,1,0,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
                             text(0,2,1,0,1,"IRF OFF time",14,7)
                             if synced == 1:
-                                if ir_of_mins > 9:
-                                    text(0,2,clr,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
-                                else:
-                                    text(0,2,clr,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                                text(0,2,clr,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
                             else:
-                                if ir_of_mins > 9:
-                                    text(0,2,0,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
-                                else:
-                                    text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                                text(0,2,0,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
                         if Pi_Cam != 11:
                             text(0,6,5,0,1,"AWB",14,7)
                             text(0,6,3,1,1,str(awbs[awb]),14,7)
@@ -2382,26 +2378,14 @@ while True:
                                 clr = 3
                             text(0,7,1,0,1,"SW 2 to 1 time",14,7)
                             if synced == 1 and cam2 != "1":
-                                if on_mins > 9:
-                                    text(0,7,clr,1,1,str(on_hour) + ":" + str(on_mins),14,7)
-                                else:
-                                    text(0,7,clr,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
+                                text(0,7,clr,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
                             else:
-                                if on_mins > 9:
-                                    text(0,7,0,1,1,str(on_hour) + ":" + str(on_mins),14,7)
-                                else:
-                                    text(0,7,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
+                                text(0,7,0,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
                             text(0,8,1,0,1,"SW 1 to 2 time",14,7)
                             if synced == 1 and cam2 != "1":
-                                if of_mins > 9:
-                                    text(0,8,clr,1,1,str(of_hour) + ":" + str(of_mins),14,7)
-                                else:
-                                    text(0,8,clr,1,1,str(of_hour) + ":0" + str(of_mins),14,7)
+                                text(0,8,clr,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
                             else:
-                                if of_mins > 9:
-                                    text(0,8,0,1,1,str(of_hour) + ":" + str(of_mins),14,7)
-                                else:
-                                    text(0,8,0,1,1,str(of_hour) + ":0" + str(of_mins),14,7)
+                                text(0,8,0,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
                         text(0,3,2,0,1,"MASK Alpha",14,7)
                         text(0,3,3,1,1,str(m_alpha),14,7)
                         text(0,4,2,0,1,"CLEAR Mask",14,7)
@@ -2410,26 +2394,14 @@ while True:
                         if sd_mode == 1:
                             text(0,9,2,0,1,"Start Rec Time",14,7)
                             if synced == 1:
-                                if ss_on_mins > 9:
-                                    text(0,9,3,1,1,str(ss_on_hour) + ":" + str(ss_on_mins),14,7)
-                                else:
-                                    text(0,9,3,1,1,str(ss_on_hour) + ":0" + str(ss_on_mins),14,7)
+                                text(0,9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
                             else:
-                                if ss_on_mins > 9:
-                                    text(0,9,0,1,1,str(ss_on_hour) + ":" + str(ss_on_mins),14,7)
-                                else:
-                                    text(0,9,0,1,1,str(ss_on_hour) + ":0" + str(ss_on_mins),14,7)
+                                text(0,9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
                             text(0,10,2,0,1,"Shutdown Time",14,7)
                             if synced == 1:
-                                if sd_mins > 9:
-                                    text(0,10,3,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
-                                else:
-                                    text(0,10,3,1,1,str(sd_hour) + ":0" + str(sd_mins),14,7)
+                                text(0,10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                             else:
-                                if sd_mins > 9:
-                                    text(0,10,0,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
-                                else:
-                                    text(0,10,0,1,1,str(sd_hour) + ":0" + str(sd_mins),14,7)
+                                text(0,10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                         text(0,11,1,0,1,"MAIN MENU",14,7)                        
 
                     elif g == 6: 
@@ -2490,9 +2462,9 @@ while True:
                             text(0,0,3,1,1,"ON",14,7)
                         if len(Jpegs) > 0:
                             text(0,1,2,0,1,"Still",14,7)
-                            text(0,2,2,0,1,"Show Video",14,7)
-                        text(0,3,2,0,1,"MP4 fps",14,7)
-                        text(0,3,3,1,1,str(mp4_fps),14,7)
+                            text(0,2,2,0,1,"SHOW ALL",14,7)
+                            text(0,2,2,1,1,"Stills",14,7)
+                            text(0,3,2,0,1,"Show Video",14,7)
                         text(0,4,2,0,1,"annotate MP4",14,7)
                         if mp4_anno == 0:
                             text(0,4,3,1,1,"No",14,7)
@@ -2505,14 +2477,13 @@ while True:
                             else:
                                 text(0,5,0,0,1,"MOVE MP4s",14,7)
                                 text(0,5,0,1,1,"to USB",14,7)
+                            text(0,7,2,0,1,"MAKE FULL",14,7)
+                            text(0,7,2,1,1,"MP4",14,7)
                             text(0,6,3,0,1,"DELETE ",14,7)
                             text(0,6,3,1,1,"VIDEO ",14,7)
-                            text(0,7,3,0,1,"DELETE",14,7)
-                            text(0,7,3,1,1,"ALL VIDS  ",14,7)
-                            text(0,8,2,0,1,"SHOW ALL",14,7)
-                            text(0,8,2,1,1,"Stills",14,7)
-                            text(0,9,2,0,1,"MAKE FULL",14,7)
-                            text(0,9,2,1,1,"MP4",14,7)
+                            text(0,10,3,0,1,"DELETE",14,7)
+                            text(0,10,3,1,1,"ALL VIDS  ",14,7)
+
                         text(0,11,1,0,1,"MAIN MENU",14,7)
                        
                     elif g == 7:
@@ -2570,15 +2541,9 @@ while True:
                                 text(0,8,3,1,1,"Long",14,7)
                         text(0,9,2,0,1,"Shutdown Time",14,7)
                         if synced == 1:
-                            if sd_mins > 9:
-                                text(0,9,3,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
-                            else:
-                                 text(0,9,3,1,1,str(sd_hour) + ":0" + str(sd_mins),14,7)
+                            text(0,9,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                         else:
-                            if sd_mins > 9:
-                                text(0,9,0,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
-                            else:
-                                text(0,9,0,1,1,str(sd_hour) + ":0" + str(sd_mins),14,7)
+                            text(0,9,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                         text(0,10,2,0,1,"Shutdown Mode",14,7)
                         if sd_mode == 0:
                             text(0,10,3,1,1,"SD_Set",14,7)
@@ -2599,7 +2564,8 @@ while True:
                         Capture = 0
                         old_camera = camera
                         camera = 1
-                        picam2.stop_encoder()
+                        picam2.stop_recording()
+                        circular = CircularOutput2(buffer_duration_ms=pref)
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
@@ -2657,7 +2623,8 @@ while True:
                         menu_timer  = time.monotonic()
                         old_camera = camera
                         camera = 1
-                        picam2.stop_encoder()
+                        picam2.stop_recording()
+                        circular = CircularOutput2(buffer_duration_ms=pref)
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
@@ -2683,26 +2650,14 @@ while True:
                             else:
                                 clr = 3
                             if synced == 1 and cam2 != "1":
-                                if ir_on_mins1 > 9:
-                                    text(0,1,clr,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
-                                else:
-                                    text(0,1,clr,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
+                                text(0,1,clr,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
                             else:
-                                if ir_on_mins1 > 9:
-                                    text(0,1,0,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
-                                else:
-                                    text(0,1,0,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
+                                text(0,1,0,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
                             text(0,2,1,0,1,"IRF OFF time",14,7)
                             if synced == 1 and cam2 != "1":
-                                if ir_of_mins1 > 9:
-                                    text(0,2,clr,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
-                                else:
-                                    text(0,2,clr,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
+                                text(0,2,clr,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
                             else:
-                                if ir_of_mins1 > 9:
-                                    text(0,2,0,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
-                                else:
-                                    text(0,2,0,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
+                                text(0,2,0,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
                         if Pi_Cam != 11:
                             text(0,6,5,0,1,"AWB",14,7)
                             text(0,6,3,1,1,str(awbs[awb1]),14,7)
@@ -3077,25 +3032,13 @@ while True:
                     if IRF == 0:
                         suntimes()
                     if synced == 1 and IRF == 0:
-                        if ir_on_mins > 9:
-                            text(0,1,2,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
-                        else:
-                            text(0,1,2,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                        text(0,1,2,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
                     elif IRF == 0:
-                        if ir_on_mins > 9:
-                            text(0,1,0,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
-                        else:
-                            text(0,1,0,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                        text(0,1,0,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
                     if synced == 1 and IRF == 0:                
-                        if ir_of_mins > 9:
-                            text(0,2,2,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
-                        else:
-                            text(0,2,2,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                        text(0,2,2,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
                     elif IRF == 0:
-                        if ir_of_mins > 9:
-                            text(0,2,0,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
-                        else:
-                            text(0,2,0,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                        text(0,2,0,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
                     save_config = 1
                     
                   elif g == 1 and IRF == 1:
@@ -3124,10 +3067,7 @@ while True:
                             ir_on_mins = 59
                             if ir_on_hour < 0:
                                 ir_on_hour = 23
-                    if ir_on_mins > 9:
-                        text(0,1,3,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
-                    else:
-                        text(0,1,3,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                    text(0,1,3,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
                     ir_on_time = (ir_on_hour * 60) + ir_on_mins
                     ir_of_time = (ir_of_hour * 60) + ir_of_mins
                     if ir_on_time >= ir_of_time:
@@ -3138,10 +3078,7 @@ while True:
                             ir_of_hour += 1
                             if ir_of_hour > 23:
                                 ir_of_hour = 0
-                        if ir_of_mins > 9:
-                            text(0,2,3,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
-                        else:
-                            text(0,2,3,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                    text(0,2,3,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
                     ir_of_time = (ir_of_hour * 60) + ir_of_mins
                     save_config = 1
 
@@ -3171,10 +3108,8 @@ while True:
                             ir_of_mins = 59
                             if ir_of_hour < 0:
                                 ir_of_hour = 23
-                    if ir_of_mins > 9:
-                        text(0,2,3,1,1,str(ir_of_hour) + ":" + str(ir_of_mins),14,7)
-                    else:
-                        text(0,2,3,1,1,str(ir_of_hour) + ":0" + str(ir_of_mins),14,7)
+                    text(0,2,3,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
+
                     ir_on_time = (ir_on_hour * 60) + ir_on_mins
                     ir_of_time = (ir_of_hour * 60) + ir_of_mins
                     if ir_of_time <= ir_on_time:
@@ -3185,10 +3120,7 @@ while True:
                             ir_on_mins = 59
                             if ir_on_hour < 0:
                                 ir_on_hour = 23
-                        if ir_on_mins > 9:
-                            text(0,1,3,1,1,str(ir_on_hour) + ":" + str(ir_on_mins),14,7)
-                        else:
-                            text(0,1,3,1,1,str(ir_on_hour) + ":0" + str(ir_on_mins),14,7)
+                    text(0,1,3,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
                       
                     ir_on_time = (ir_on_hour * 60) + ir_on_mins
                     save_config = 1
@@ -3384,11 +3316,10 @@ while True:
                         pre_frames -=1
                         pre_frames = max(pre_frames,1)
                     text(0,2,0,1,1,str(pre_frames) + " Secs",14,7)
-                    picam2.stop_encoder()
-                    picam2.stop()
-                    encoder.output = CircularOutput(buffersize = pre_frames * fps)
-                    picam2.start()
-                    picam2.start_encoder(encoder)
+                    picam2.stop_recording()
+                    pref = pre_frames * 1000
+                    circular = CircularOutput2(buffer_duration_ms=pref)
+                    picam2.start_recording(encoder, circular)
                     time.sleep(pre_frames)
                     text(0,2,3,1,1,str(pre_frames) + " Secs",14,7)
                     save_config = 1
@@ -3428,7 +3359,9 @@ while True:
                         text(0,6,1,0,1,"Camera: " + str(camera + 1),14,7)
                     if camera_sw >= 2:
                         old_camera = camera
-                        picam2.stop_encoder()
+                        picam2.stop_recording()
+                        pref = pre_frames * 1000
+                        circular = CircularOutput2(buffer_duration_ms=pref)
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
@@ -3442,25 +3375,13 @@ while True:
                     if camera_sw == 0:
                       suntimes()
                       if synced == 1 and cam2 != "1":
-                        if on_mins > 9:
-                            text(0,7,clr,1,1,str(on_hour) + ":" + str(on_mins),14,7)
-                        else:
-                            text(0,7,clr,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
+                          text(0,7,clr,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
                       else:
-                        if on_mins > 9:
-                            text(0,7,0,1,1,str(on_hour) + ":" + str(on_mins),14,7)
-                        else:
-                            text(0,7,0,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
+                          text(0,7,0,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
                       if synced == 1 and cam2 != "1":
-                        if of_mins > 9:
-                            text(0,8,clr,1,1,str(of_hour) + ":" + str(of_mins),14,7)
-                        else:
-                            text(0,8,clr,1,1,str(of_hour) + ":0" + str(of_mins),14,7)
+                          text(0,8,clr,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
                       else:
-                        if of_mins > 9:
-                            text(0,8,0,1,1,str(of_hour) + ":" + str(of_mins),14,7)
-                        else:
-                            text(0,8,0,1,1,str(of_hour) + ":0" + str(of_mins),14,7)
+                          text(0,8,0,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
                     save_config = 1                        
 
                   elif g == 7 and camera_sw == 1:
@@ -3494,10 +3415,7 @@ while True:
                             on_mins = 59
                             if on_hour < 0:
                                 on_hour = 23
-                    if on_mins > 9:
-                        text(0,7,3,1,1,str(on_hour) + ":" + str(on_mins),14,7)
-                    else:
-                        text(0,7,3,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
+                    text(0,7,3,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
                     on_time = (on_hour * 60) + on_mins
                     of_time = (of_hour * 60) + of_mins
                     if on_time >= of_time:
@@ -3508,10 +3426,7 @@ while True:
                             of_mins = 0
                             if of_hour > 23:
                                 of_hour = 0
-                        if of_mins > 9:
-                            text(0,8,3,1,1,str(of_hour) + ":" + str(of_mins),14,7)
-                        else:
-                            text(0,8,3,1,1,str(of_hour) + ":0" + str(of_mins),14,7)
+                        text(0,8,3,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
                         of_time = (of_hour * 60) + of_mins
                     save_config = 1
 
@@ -3549,10 +3464,7 @@ while True:
                             of_mins = 59
                             if of_hour < 0:
                                 of_hour = 23
-                    if of_mins > 9:
-                        text(0,8,3,1,1,str(of_hour) + ":" + str(of_mins),14,7)
-                    else:
-                        text(0,8,3,1,1,str(of_hour) + ":0" + str(of_mins),14,7)
+                    text(0,8,3,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
                     on_time = (on_hour * 60) + on_mins
                     of_time = (of_hour * 60) + of_mins
                     if of_time <= on_time:
@@ -3563,10 +3475,7 @@ while True:
                             on_mins = 59
                             if on_hour < 0:
                                 on_hour = 23
-                        if on_mins > 9:
-                            text(0,7,3,1,1,str(on_hour) + ":" + str(on_mins),14,7)
-                        else:
-                            text(0,7,3,1,1,str(on_hour) + ":0" + str(on_mins),14,7)
+                        text(0,7,3,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
                         on_time = (on_hour * 60) + on_mins
                     save_config = 1
 
@@ -3652,7 +3561,7 @@ while True:
                             windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
                             pygame.display.update()
 
-                  elif g == 2  and show == 1 and len(Jpegs) > 0:
+                  elif g == 3  and show == 1 and len(Jpegs) > 0:
                       #Show Video
                       if len(Jpegs) > 0:
                           jpgs = Jpegs[q].split("/")
@@ -3675,17 +3584,6 @@ while True:
                                     os.system("vlc /" + vide[1] + "/" + vide[2] + "/" + vid + '.mp4')
 
                                 stop = 1
-
-                  elif g == 3:
-                    # MP4 FPS
-                    if (h == 1 and event.button == 1) or event.button == 4:
-                        mp4_fps +=1
-                        mp4_fps = min(mp4_fps,100)
-                    else:
-                        mp4_fps -=1
-                        mp4_fps = max(mp4_fps,5)
-                    text(0,3,3,1,1,str(mp4_fps),14,7)
-                    save_config = 1
 
                   elif g == 4:
                     # mp4_annoTATE MP4
@@ -3715,6 +3613,11 @@ while True:
                         text(0,5,3,1,1,"MP4s",14,7)
                         for xx in range(0,len(Videos)):
                             movi = Videos[xx].split("/")
+                            image = pygame.image.load(Jpegs[xx])
+                            cropped = pygame.transform.scale(image, (pre_width,pre_height))
+                            windowSurfaceObj.blit(cropped, (0, 0))
+                            text(0,1,3,1,1,str(xx+1) + " / " + str(len(Videos)),14,7)
+                            pygame.display.update()
                             if movi[1] == "home":
                                 if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
                                     os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4])
@@ -3825,7 +3728,7 @@ while True:
                     oldimg = []
                     time.sleep(0.5)
                         
-                  elif g == 7:
+                  elif g == 10:
                     # DELETE ALL VIDEOS
                     menu_timer  = time.monotonic()
                     text(0,3,3,1,1," ",14,7)
@@ -3874,11 +3777,11 @@ while True:
                         Jpegs.sort()
                         ram_frames = len(Rideos)
                     
-                  elif g == 8 and ( frames > 0 or ram_frames > 0):
+                  elif g == 2 and ( frames > 0 or ram_frames > 0):
                     # SHOW ALL STILLS
                     menu_timer  = time.monotonic()
-                    text(0,8,2,0,1,"STOP",14,7)
-                    text(0,8,2,1,1,"     ",14,7)
+                    text(0,2,2,0,1,"STOP",14,7)
+                    text(0,2,2,1,1,"     ",14,7)
                     st = 0
                     nq = 0
                     while st == 0:
@@ -3889,7 +3792,7 @@ while True:
                                     if mousex > cwidth:
                                         buttonx = int(mousey/bh)
                                         nq = q
-                                        if buttonx == 8:
+                                        if buttonx == 2:
                                             st = 1
                             
                             if os.path.getsize(Jpegs[q]) > 0 and st == 0:
@@ -3919,11 +3822,11 @@ while True:
                                     windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
                                     pygame.display.update()
                                     time.sleep(0.5)
-                    text(0,8,2,0,1,"SHOW ALL",14,7)
-                    text(0,8,2,1,1,"Stills",14,7)
+                    text(0,2,2,0,1,"SHOW ALL",14,7)
+                    text(0,2,2,1,1,"Stills",14,7)
                     q = nq - 1
 
-                  elif g == 9 and show == 1:
+                  elif g == 7 and show == 1:
                    # MAKE FULL MP4
                     menu_timer  = time.monotonic()
                     if os.path.exists('mylist.txt'):
@@ -3938,8 +3841,8 @@ while True:
                         if use_gpio == 1 and fan_ctrl == 1:
                             led_fan.value = 1
                         frame = 0
-                        text(0,9,3,0,1,"MAKING",14,7)
-                        text(0,9,3,1,1,"FULL MP4",14,7)
+                        text(0,7,3,0,1,"MAKING",14,7)
+                        text(0,7,3,1,1,"FULL MP4",14,7)
                         pygame.display.update()
                         if os.path.exists('mylist.txt'):
                             os.remove('mylist.txt')
@@ -3979,7 +3882,6 @@ while True:
                             for x in range(0,len(txtconfig)):
                                 if os.path.exists(txtconfig[x] ) and txtconfig[x][len(txtconfig[x]) - 5:] != "f.mp4":
                                     os.remove(txtconfig[x] )
-                            #os.remove('mylist.txt')
                             txtvids = []
                             #move MP4 to usb
                             USB_Files  = []
@@ -3987,8 +3889,8 @@ while True:
                             if len(USB_Files) > 0:
                                 if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
                                     os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
-                                text(0,8,3,0,1,"MOVING",14,7)
-                                text(0,8,3,1,1,"MP4s",14,7)
+                                text(0,5,3,0,1,"MOVING",14,7)
+                                text(0,5,3,1,1,"MP4s",14,7)
                                 Videos = glob.glob(h_user + '/Videos/*.mp4')
                                 Videos.sort()
                                 for xx in range(0,len(Videos)):
@@ -4006,8 +3908,8 @@ while True:
                                                  os.remove(Videos[xx][:-4] + ".jpg")
                                 Videos = glob.glob(h_user + '/Videos/*.mp4')
                                 frames = len(Videos)
-                                text(0,8,0,0,1,"MOVE MP4s",14,7)
-                                text(0,8,0,1,1,"to USB",14,7)
+                                text(0,5,0,0,1,"MOVE MP4s",14,7)
+                                text(0,5,0,1,1,"to USB",14,7)
                        
                         Videos = glob.glob(h_user + '/Videos/*.mp4')
                         USB_Files  = (os.listdir(m_user))
@@ -4021,11 +3923,11 @@ while True:
                             usedusb = os.statvfs(m_user + "/" + USB_Files[0] + "/")
                             USB_storage = ((1 - (usedusb.f_bavail / usedusb.f_blocks)) * 100)
                         if len(USB_Files) > 0 and len(Videos) > 0:
-                            text(0,8,2,0,1,"MOVE MP4s",14,7)
-                            text(0,8,2,1,1,"to USB " + str(int(USB_storage))+"%",14,7)
+                            text(0,5,2,0,1,"MOVE MP4s",14,7)
+                            text(0,5,2,1,1,"to USB " + str(int(USB_storage))+"%",14,7)
                         else:
-                            text(0,8,0,0,1,"MOVE MP4s",14,7)
-                            text(0,8,0,1,1,"to USB",14,7)
+                            text(0,5,0,0,1,"MOVE MP4s",14,7)
+                            text(0,5,0,1,1,"to USB",14,7)
                         pygame.display.update()
                         Capture = old_cap
                         pause_thread = False
@@ -4165,10 +4067,7 @@ while True:
                             sd_mins = 59
                             if sd_hour < 0:
                                 sd_hour = 23
-                    if sd_mins > 9:
-                        text(0,9,3,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
-                    else:
-                        text(0,9,3,1,1,str(sd_hour) + ":0" + str(sd_mins),14,7)
+                    text(0,9,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                     sd_time = (sd_hour * 60) + sd_mins
                     save_config = 1
                     
@@ -4206,15 +4105,9 @@ while True:
                            sd_hour += 24
                            sd_time = (sd_hour * 60) + sd_mins
                     if synced == 1:
-                        if sd_mins > 9:
-                            text(0,9,3,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
-                        else:
-                            text(0,9,3,1,1,str(sd_hour) + ":0" + str(sd_mins),14,7)
+                        text(0,9,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                     else:
-                        if sd_mins > 9:
-                            text(0,9,0,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
-                        else:
-                            text(0,9,0,1,1,str(sd_hour) + ":0" + str(sd_mins),14,7)
+                        text(0,9,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                     start_up = time.monotonic()
                     save_config = 1
                     
@@ -4240,15 +4133,9 @@ while True:
                     sd_mins = ss_of_mins
                     sd_time = (sd_hour * 60) + sd_mins
                     if synced == 1:
-                        if sd_mins > 9:
-                            text(0,9,3,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
-                        else:
-                            text(0,9,3,1,1,str(sd_hour) + ":0" + str(sd_mins),14,7)
+                        text(0,9,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                     else:
-                        if sd_mins > 9:
-                            text(0,9,0,1,1,str(sd_hour) + ":" + str(sd_mins),14,7)
-                        else:
-                            text(0,9,0,1,1,str(sd_hour) + ":0" + str(sd_mins),14,7)
+                        text(0,9,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                     start_up = time.monotonic()
                     save_config = 1
                     
@@ -4448,25 +4335,13 @@ while True:
                     if IRF1 == 0:
                         suntimes()
                     if synced == 1 and IRF1 == 0:
-                        if ir_on_mins1 > 9:
-                            text(0,1,2,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
-                        else:
-                            text(0,1,2,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
+                        text(0,1,2,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
                     elif IRF1 == 0:
-                        if ir_on_mins1 > 9:
-                            text(0,1,0,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
-                        else:
-                            text(0,1,0,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
-                    if synced == 1 and IRF1 == 0:                
-                        if ir_of_mins1 > 9:
-                            text(0,2,2,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
-                        else:
-                            text(0,2,2,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
+                        text(0,1,0,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
+                    if synced == 1 and IRF1 == 0: 
+                        text(0,2,2,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)               
                     elif IRF1 == 0:
-                        if ir_of_mins1 > 9:
-                            text(0,2,0,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
-                        else:
-                            text(0,2,0,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
+                        text(0,2,2,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
                     save_config = 1
                     
                   if g == 1 and IRF1 == 1:
@@ -4495,10 +4370,7 @@ while True:
                             ir_on_mins1 = 59
                             if ir_on_hour1 < 0:
                                 ir_on_hour1 = 23
-                    if ir_on_mins1 > 9:
-                        text(0,1,3,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
-                    else:
-                        text(0,1,3,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
+                    text(0,1,3,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
                     ir_on_time1 = (ir_on_hour1 * 60) + ir_on_mins1
                     ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
                     if ir_on_time1 >= ir_of_time1:
@@ -4509,10 +4381,7 @@ while True:
                             ir_of_hour1 += 1
                             if ir_of_hour1 > 23:
                                 ir_of_hour1 = 0
-                        if ir_of_mins1 > 9:
-                            text(0,2,3,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
-                        else:
-                            text(0,2,3,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
+                    text(0,2,3,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
                     ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
                     save_config = 1
 
@@ -4542,10 +4411,7 @@ while True:
                             ir_of_mins1 = 59
                             if ir_of_hour1 < 0:
                                 ir_of_hour1 = 23
-                    if ir_of_mins1 > 9:
-                        text(0,2,3,1,1,str(ir_of_hour1) + ":" + str(ir_of_mins1),14,7)
-                    else:
-                        text(0,2,3,1,1,str(ir_of_hour1) + ":0" + str(ir_of_mins1),14,7)
+                    text(0,2,3,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
                     ir_on_time1 = (ir_on_hour1 * 60) + ir_on_mins1
                     ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
                     if ir_of_time1 <= ir_on_time1:
@@ -4556,11 +4422,8 @@ while True:
                             ir_on_mins1 = 59
                             if ir_on_hour1 < 0:
                                 ir_on_hour1 = 23
-                        if ir_on_mins1 > 9:
-                            text(0,1,3,1,1,str(ir_on_hour1) + ":" + str(ir_on_mins1),14,7)
-                        else:
-                            text(0,1,3,1,1,str(ir_on_hour1) + ":0" + str(ir_on_mins1),14,7)
-                      
+                    text(0,1,3,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
+                     
                     ir_on_time = (ir_on_hour1 * 60) + ir_on_mins1
                     save_config = 1
 
