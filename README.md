@@ -16,7 +16,7 @@ On a Pi5 allows switching of cameras based on sunrise/sunset or set times.
 
 It will capture videos at 30fps at 1920 x 1080, or on a GS camera 1456 x 1088.
 
-lt also captures frames before the trigger frame, default is 5 seconds but user settable.
+lt also captures frames before the trigger frame, default is 2 seconds but user settable.
 
 Pi v3, Arducam HAWKEYE, OWLSIGHT or 16MP cameras can be auto / manually focussed. Pi v3 also can do spot focus.
 For spot click on image when in menu showing focus options.
