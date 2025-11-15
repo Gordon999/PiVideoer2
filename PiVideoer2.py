@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.31"
+version = "1.33"
 
 import time
 import cv2
@@ -55,7 +55,7 @@ you.elevation = 100          # set your location height in metres
 UTC_offset    = 0            # set your local time offset to UTC in hours, 1.5 = 1 hr 30mins
 on_sunrise    = 0            # set to 1 to only start recording at sunrise  
 sr_offset     = -0.5         # offset in hours to start recording before/after sunrise (if on_sunrise = 1), -0.5 = sunrise - 30mins *
-sd_mode       = 0            # shutdown mode,    0 = set time, 1 = use sunset *
+sd_mode       = 0            # shutdown Mode,    0 = set time, 1 = use sunset *
 sd_hour       = 0            # Shutdown Hour,    1 - 23, 0:00 will NOT SHUTDOWN *
 sd_mins       = 0            # Shutdown Minutes, 0 - 59, 0:00 will NOT SHUTDOWN *
 ss_offset     = 0.5          # offset in hours to shutdown after/before sunset (if sd_mode = 1) , 0.5 = sunset + 30mins *
@@ -65,10 +65,6 @@ ss_offset     = 0.5          # offset in hours to shutdown after/before sunset (
 # set screen size
 scr_width  = 800
 scr_height = 480
-
-# set preview size
-pre_width  = 640
-pre_height = 480
 
 # use GPIO for external camera triggers, IR switch and/or optional FAN (NOT Pi5 Active Cooler / Case Fan).
 # DISABLE Pi FAN CONTROL in Preferences > Performance to GPIO 14 !!
@@ -109,13 +105,13 @@ detection     = 10      # % of pixels detected to trigger, in % *
 det_high      = 100     # max % of pixels detected to trigger, in %  *
 col_filter    = 3       # 3 = FULL, SEE COL_FILTERS *
 nr            = 2       # Noise reduction, 0 off, 1 low, 2 high *
-pre_frames    = 2       # seconds *
+pre_frames    = 5       # seconds *
 dspeed        = 100     # detection speed 1-100, 1 = slowest *
 mp4_fps       = 30      # set MP4 fps *
 mp4_anno      = 1       # mp4_annotate MP4s with date and time , 1 = yes, 0 = no *
 SD_F_Act      = 0       # Action on SD FULL, 0 = STOP, 1 = DELETE OLDEST VIDEO, 2 = COPY TO USB (if fitted) *
-interval      = 0       # seconds of wait between capturing Pictures / TIMELAPSE (set threshold to 0)*
-v_length      = 15000   # video length in mS *
+interval      = 0       # seconds of wait between capturing Pictures / for TIMELAPSE set interval and set threshold to 0*
+v_length      = 20000   # video length in mS *
 bitrate       = 5000000 # video bitrate
 
 # setup for 1st camera
@@ -194,6 +190,8 @@ camera_sw     = 0       # camera switch mode *
 
 # initialise parameters
 config_file   = "PiVideoconfig043.txt"
+pre_width     = int((scr_width/8)*7)
+pre_height    = scr_height
 old_camera    = camera
 synced        = 0
 show          = 0
@@ -1298,11 +1296,11 @@ while True:
             line = file.readline()
             if line == "":
                 line = 0
-            text(0,0,3,1,1,str(int(temp)) + " / " + str(int(line)),14,7)
+            text(0,0,1,1,1,str(int(temp)) + " / " + str(int(line)),14,7)
     # read non Pi5 temperature
     elif menu == 5:
         text(0,0,2,0,1,"CPU Temp",14,7)
-        text(0,0,3,1,1,str(int(temp)),14,7)
+        text(0,0,1,1,1,str(int(temp)),14,7)
     # watchdog
     if time.monotonic() - watch_timer > watch_time and watch == True:
         qq.put(time.monotonic())
@@ -1423,7 +1421,7 @@ while True:
                     led_sw_ir1.off()
                     led_ir_light.off()
                     if menu == 2 :
-                        text(0,0,1,0,1,"IR Filter",14,7)
+                        text(0,0,1,0,1,"IR Filter (ON)",14,7)
                  
                 elif ((hour* 60) + mins >= ir_of_time or (hour* 60) + mins < ir_on_time):
                     if rec_stop == 1: # night time, stop recording, all IR Filters and Light OFF
@@ -1434,14 +1432,14 @@ while True:
                         led_ir_light.off()
                         stop_rec = 1
                         if menu == 2 :
-                            text(0,0,2,0,1,"IR Filter",14,7)
+                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
                     else: # night time switch IR filters OFF and light ON
                         IRF_on = 0
                         stop_rec = 0
                         led_sw_ir.off()
                         led_ir_light.on()
                         if menu == 2 :
-                            text(0,0,2,0,1,"IR Filter",14,7)
+                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
 
         # switch IR filter1 / Light / RECORD if switch time reached and clocked synced
         if IRF1 <= 1 and camera == 1: # AUTO (Sun) or SET TIMES - switch IR filter / Light / RECORD at set times
@@ -1454,7 +1452,7 @@ while True:
                     led_sw_ir.off()
                     led_ir_light.off()
                     if menu == 7:
-                        text(0,0,1,0,1,"IR Filter",14,7)
+                        text(0,0,1,0,1,"IR Filter (ON)",14,7)
                 elif ((hour* 60) + mins >= ir_of_time1 or (hour* 60) + mins < ir_on_time1):
                     if rec_stop == 1: # night time, stop recording, all IR Filters and Light OFF
                         now = datetime.datetime.now()
@@ -1464,14 +1462,14 @@ while True:
                         led_ir_light.off()
                         stop_rec = 1
                         if menu == 7:
-                            text(0,0,2,0,1,"IR Filter",14,7)
+                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
                     else: # night time switch IR filters OFF and light ON
                         IRF_on1 = 0
                         stop_rec = 0
                         led_sw_ir1.off()
                         led_ir_light.on()
                         if menu == 7:
-                            text(0,0,2,0,1,"IR Filter",14,7)
+                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
                             
           
         # shutdown if shutdown time reached and clocked synced
@@ -1985,8 +1983,13 @@ while True:
             timer = time.monotonic()
             menu_timer = time.monotonic()
             mousex, mousey = event.pos
+            # screen capture
+            if mousex < 10 and mousey < 10:
+                now = datetime.datetime.now()
+                timestamp = now.strftime("%y%m%d%H%M%S")
+                pygame.image.save(windowSurfaceObj, timestamp + ".png")
             # set crop position
-            if mousex < pre_width and zoom == 0 and ((menu != 7 or ((Pi_Cam == 3 or Pi_Cam == 8) and AF_f_mode == 1)) or (Pi_Cam == 5 or Pi_Cam == 6)) and event.button != 3:
+            elif mousex < pre_width and zoom == 0 and ((menu != 7 or ((Pi_Cam == 3 or Pi_Cam == 8) and AF_f_mode == 1)) or (Pi_Cam == 5 or Pi_Cam == 6)) and event.button != 3:
                 if (Pi_Cam == 5 or Pi_Cam == 6):
                     fcount = 0
                 a = mousex
@@ -2174,9 +2177,9 @@ while True:
                         text(0,4,2,0,1,"High Threshold",14,7)
                         text(0,4,3,1,1,str(threshold2),14,7)
                         text(0,5,2,0,1,"Horiz'l Crop",14,7)
-                        text(0,5,3,1,1,str(h_crop),14,7)
+                        text(0,5,3,1,1,str(h_crop * 2),14,7)
                         text(0,6,2,0,1,"Vert'l Crop",14,7)
-                        text(0,6,3,1,1,str(v_crop),14,7)
+                        text(0,6,3,1,1,str(v_crop * 2),14,7)
                         text(0,7,2,0,1,"Colour Filter",14,7)
                         text(0,7,3,1,1,str(col_filters[col_filter]),14,7)
                         text(0,8,2,0,1,"FULL Mask",14,7)
@@ -2210,8 +2213,6 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                         
-                         
                         for d in range(0,10):
                             button(0,d,0)
                         text(0,7,5,0,1,"Meter",14,7)
@@ -2277,9 +2278,13 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                         
                         for d in range(0,10):
                             button(0,d,0)
+                        if IRF_on == 0:
+                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
+                        else:
+                            text(0,0,1,0,1,"IR Filter (ON)",14,7)
+                        text(0,0,3,1,1,IR_filters[IRF],14,7)
                         if Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6:
                             text(0,4,2,0,1,"Focus",14,7)
                             if AF_f_mode == 0:
@@ -2327,11 +2332,6 @@ while True:
                         else:
                             button(0,10,1)
                             text(0,10,1,0,1,"Zoom",14,0)
-                        if IRF_on == 0:
-                            text(0,0,2,0,1,"IR Filter",14,7)
-                        else:
-                            text(0,0,1,0,1,"IR Filter",14,7)
-                        text(0,0,3,1,1,IR_filters[IRF],14,7)
                         text(0,11,1,0,1,"MAIN MENU",14,7)
                         ir_on_time = (ir_on_hour * 60) + ir_on_mins
                         ir_of_time = (ir_of_hour * 60) + ir_of_mins
@@ -2349,9 +2349,9 @@ while True:
                             button(0,d,0)
                         text(0,0,2,0,1,"Interval",14,7)
                         text(0,0,3,1,1,str(interval) + " Secs",14,7)
-                        text(0,1,2,0,1,"V Length",14,7)
+                        text(0,1,2,0,1,"Video Length",14,7)
                         text(0,1,3,1,1,str(v_length/1000) + " Secs",14,7)
-                        text(0,2,2,0,1,"V Pre-Frames",14,7)
+                        text(0,2,2,0,1,"Vid Pre-Frames",14,7)
                         text(0,2,3,1,1,str(pre_frames) + " Secs",14,7)
                         if Pi == 5 and cam2 != "1":
                             text(0,5,1,0,1,"Camera: " + str(camera + 1),14,7)
@@ -2501,7 +2501,7 @@ while True:
                                 line = file.readline()
                                 if line == "":
                                     line = 0
-                            text(0,0,3,1,1,str(int(temp)) + " / " + str(int(line)),14,7)
+                            text(0,0,1,1,1,str(int(temp)) + " / " + str(int(line)),14,7)
                         else:
                             text(0,0,2,0,1,"CPU Temp",14,7)
                             text(0,0,3,1,1,str(int(temp)),14,7)
@@ -2672,15 +2672,15 @@ while True:
                             button(0,10,1)
                             text(0,10,1,0,1,"Zoom",14,0)
                         if IRF_on == 0:
-                            text(0,0,2,0,1,"IR Filter",14,7)
+                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
                         else:
-                            text(0,0,1,0,1,"IR Filter",14,7)
+                            text(0,0,1,0,1,"IR Filter (ON)",14,7)
                         text(0,0,3,1,1,IR_filters[IRF1],14,7)
                         text(0,11,1,0,1,"MAIN MENU",14,7)
                         # restart circular buffer
                         start_buffer()
                         set_parameters1()
-                        
+                       
 
                                         
 # MENU 0 === DETECTION =================================================================================================
@@ -2758,33 +2758,53 @@ while True:
 
                   elif g == 5:
                       # H CROP
-                      if (h == 1 and event.button == 1) or event.button == 4:
+                      if gv < bh/4:
+                          mp = 1 - hp
+                          h_crop = int((mp * (pre_width/2)) + 1)
+                          if a-h_crop < 1:
+                              h_crop = a 
+                              new_crop = 0
+                              new_mask = 0
+                          if a+h_crop > cwidth:
+                              h_crop = cwidth - a 
+                              new_crop = 0
+                              new_mask = 0
+                      elif (h == 1 and event.button == 1) or event.button == 4:
                           h_crop +=1
                           h_crop = min(h_crop,pre_width)
                           if a-h_crop < 1 or b-v_crop < 1 or a+h_crop > cwidth or b+v_crop > int(cwidth/(pre_width/pre_height)):
                               h_crop -=1
                               new_crop = 0
                               new_mask = 0
-                          text(0,5,3,1,1,str(h_crop),14,7)
                       else:
                           h_crop -=1
                           h_crop = max(h_crop,1)
-                          text(0,5,3,1,1,str(h_crop),14,7)
+                      text(0,5,3,1,1,str(h_crop  * 2),14,7)
                       mask,change = MaskChange()
                       save_config = 1
                     
                   elif g == 6:
                       # V CROP
-                      if (h == 1 and event.button == 1) or event.button == 4:
+                      if gv < bh/4:
+                          mp = 1 - hp
+                          v_crop = int((mp * (pre_width/2)) + 1)
+                          if b-v_crop < 1:
+                              v_crop = b 
+                              new_crop = 0
+                              new_mask = 0
+                          if b+v_crop > int(cwidth/(pre_width/pre_height)):
+                              v_crop = cheight - b 
+                              new_crop = 0
+                              new_mask = 0
+                      elif (h == 1 and event.button == 1) or event.button == 4:
                           v_crop +=1
                           v_crop = min(v_crop,pre_height)
                           if a-h_crop < 1 or b-v_crop < 1 or a+h_crop > cwidth or b+v_crop > int(cwidth/(pre_width/pre_height)):
                               v_crop -=1
-                          text(0,6,3,1,1,str(v_crop),14,7)
                       else:
                           v_crop -=1
                           v_crop = max(v_crop,1)
-                          text(0,6,3,1,1,str(v_crop),14,7)
+                      text(0,6,3,1,1,str(v_crop * 2),14,7)
                       mask,change = MaskChange()
                       save_config = 1                    
 
@@ -3056,13 +3076,13 @@ while True:
                         IRF_on = 0
                         led_sw_ir.off()
                         led_ir_light.on()
-                        text(0,0,2,0,1,"IR Filter",14,7)
+                        text(0,0,2,0,1,"IR Filter (OFF)",14,7)
                     elif IRF == 3:
                         IRF_on = 1
                         led_sw_ir.on()
                         if IRF_on1 == 1:
                             led_ir_light.off()
-                        text(0,0,1,0,1,"IR Filter",14,7)
+                        text(0,0,1,0,1,"IR Filter (ON)",14,7)
                     if IRF == 0:
                         suntimes()
                     if synced == 1 and IRF == 0:
@@ -3333,14 +3353,17 @@ while True:
 # MENU 3 === VIDEO & SWITCHING =================================================================================================
                 elif menu == 3:
                   if g == 0:
-                    # INTERVAL
-                    if (h == 1 and event.button == 1) or event.button == 4:
+		            # INTERVAL
+                    if gv < bh/4:
+                        mp = 1 - hp
+                        interval = int((mp * 600) + 1)
+                    elif (h == 1 and event.button == 1) or event.button == 4:
                         interval +=1
                         interval = min(interval,180)
                     else:
                         interval -=1
                         interval = max(interval,0)
-                    text(0,0,3,1,1,str(interval),14,7)
+                    text(0,0,3,1,1,str(interval) + " Secs",14,7)
                     save_config = 1
 
                   elif g == 1:
@@ -4241,7 +4264,10 @@ while True:
                     
                   elif g == 10:
                     # DETECTION SPEED
-                    if (h == 0 and event.button == 1) or event.button == 5:
+                    if gv < bh/4:
+                        mp = 1 - hp
+                        dspeed = int((mp * 99) + 1)
+                    elif (h == 0 and event.button == 1) or event.button == 5:
                         dspeed -=1
                         dspeed = max(dspeed,1)
                     else:
@@ -4455,13 +4481,13 @@ while True:
                         IRF_on1 = 0
                         led_sw_ir1.off()
                         led_ir_light.on()
-                        text(0,0,2,0,1,"IR Filter",14,7)
+                        text(0,0,2,0,1,"IR Filter (OFF)",14,7)
                     elif IRF1 == 3:
                         IRF_on1 = 1
                         led_sw_ir1.on()
                         if IRF_on == 1:
                             led_ir_light.off()
-                        text(0,0,1,0,1,"IR Filter",14,7)
+                        text(0,0,1,0,1,"IR Filter (ON)",14,7)
                     if IRF1 == 0:
                         suntimes()
                     if synced == 1 and IRF1 == 0:
