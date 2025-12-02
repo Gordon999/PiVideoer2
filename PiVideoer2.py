@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.33"
+version = "1.40"
 
 import time
 import cv2
@@ -53,10 +53,10 @@ you.lat       = '51.6000000' # set your location latitude
 you.lon       = '-1.0500000' # set your location longtitude
 you.elevation = 100          # set your location height in metres
 UTC_offset    = 0            # set your local time offset to UTC in hours, 1.5 = 1 hr 30mins
-on_sunrise    = 0            # set to 1 to only start recording at sunrise  
+on_sunrise    = 1            # set to 1 to only start recording at sunrise  
 sr_offset     = -0.5         # offset in hours to start recording before/after sunrise (if on_sunrise = 1), -0.5 = sunrise - 30mins *
-sd_mode       = 0            # shutdown Mode,    0 = set time, 1 = use sunset *
-sd_hour       = 0            # Shutdown Hour,    1 - 23, 0:00 will NOT SHUTDOWN *
+sd_mode       = 1            # shutdown Mode,    0 = set time, 1 = use sunset *
+sd_hour       = 0            # Shutdown Hour,    0 - 23, 0:00 will NOT SHUTDOWN *
 sd_mins       = 0            # Shutdown Minutes, 0 - 59, 0:00 will NOT SHUTDOWN *
 ss_offset     = 0.5          # offset in hours to shutdown after/before sunset (if sd_mode = 1) , 0.5 = sunset + 30mins *
 
@@ -94,7 +94,7 @@ fan        = 14
 fan_ctrl   = 1  # 0 for OFF.
 
 # enable watchdog
-watch = False
+watch      = False
 
 # set default config parameters
 v_crop        = 150     # size of vertical detection window *
@@ -113,6 +113,7 @@ SD_F_Act      = 0       # Action on SD FULL, 0 = STOP, 1 = DELETE OLDEST VIDEO, 
 interval      = 0       # seconds of wait between capturing Pictures / for TIMELAPSE set interval and set threshold to 0*
 v_length      = 20000   # video length in mS *
 bitrate       = 5000000 # video bitrate
+use_ref       = 0       # use reference image, 0 = NO, 1 = YES *
 
 # setup for 1st camera
 mode          = 1       # set camera mode *
@@ -185,11 +186,13 @@ m_alpha       = 130     # MASK ALPHA *
 sync_time     = 120     # time sync check time in seconds *
 camera        = 0       # camera in use *
 camera_sw     = 0       # camera switch mode *
+ref_time      = 10      # reference image timer in seconds
+max_vlen      = 120     # MAX video length in seconds (only used by use_ref)
 
 # * adjustable whilst running
 
 # initialise parameters
-config_file   = "PiVideoconfig043.txt"
+config_file   = "PiVideoconfig044.txt"
 pre_width     = int((scr_width/8)*7)
 pre_height    = scr_height
 old_camera    = camera
@@ -201,17 +204,15 @@ record        = 0
 timer         = 0
 zoom          = 0
 trace         = 0
-timer10       = 0
+lapse_timer       = 0
 col_filterp   = 0
 a             = int(scr_width/3)
 b             = int(scr_height/2)
 fcount        = 0
 dc            = 0
 q             = 0
-of            = 0
 txtvids       = []
 restart2      = 0
-timer2        = time.monotonic()
 res2          = 0
 max_fcount    = 10
 gcount        = 0
@@ -231,6 +232,12 @@ rec_stop      = 0
 show_vid      = 1
 old_show_vid  = show_vid
 pref          = pre_frames * 1000
+rgray         = []
+confidence    = 1
+ref_timer     = time.monotonic()
+change_crop   = 1
+con_hlimit    = 0.7
+con_llimit    = 0.2
 
 # apply timestamp to videos
 def apply_timestamp(request):
@@ -325,7 +332,7 @@ if not os.path.exists(config_file):
               mode1,speed1,gain1,brightness1,contrast1,awb1,int(red1*10),int(blue1*10),meter1,ev1,denoise1,quality1,sharpness1,saturation1,
               fps1,AF_f_mode1,AF_focus1,AF_f_mode,AF_focus,IRF_on,on_hour,of_hour,on_mins,of_mins,ir_on_hour,ir_of_hour,ir_on_mins,ir_of_mins,
               camera_sw,AF_f_spot,AF_f_spot1,ir_on_hour1,ir_of_hour1,ir_on_mins1,ir_of_mins1,IRF1,IRF_on1,use_buzz,sd_mode,sd_mins,
-              int((sr_offset * 100) + 1200),int((ss_offset * 100) + 1200),m_alpha ]
+              int((sr_offset * 100) + 1200),int((ss_offset * 100) + 1200),m_alpha,use_ref ]
     with open(config_file, 'w') as f:
         for item in defaults:
             f.write("%s\n" % item)
@@ -426,6 +433,7 @@ sd_mins     = config[83]
 sr_offset   = (config[84] - 1200)/100
 ss_offset   = (config[85] - 1200)/100
 m_alpha     = config[86]
+use_ref     = config[87]
 
 if camera_sw == 3:
     camera = 1
@@ -667,7 +675,7 @@ if use_gpio == 1:
 
 # timelapse interval timer (set Low Threshold = 0 and set interval timer)
 if threshold == 0:
-    timer10 = time.monotonic()
+    lapse_timer = time.monotonic()
     if v_length > interval * 1000:
         v_length = (interval - 1) * 1000
 
@@ -807,7 +815,7 @@ if not os.path.exists(h_user + '/CMask.bmp'):
    pygame.image.save(windowSurfaceObj,h_user + '/CMask.bmp')
    pygame.display.quit()
 
-def MaskChange(): # used for masked window resizing
+def MaskChange(): # used for mask resizing
    global v_crop,h_crop
    mask = cv2.imread(h_user + '/CMask.bmp')
    mask = cv2.resize(mask, dsize=(v_crop * 2, h_crop * 2), interpolation=cv2.INTER_CUBIC)
@@ -843,7 +851,7 @@ for x in range(0,10):
             foc_sub3 = x
 
 def start_buffer():
-    global lores_width,lores_height,vid_width,vid_height,picam2,encoder,encoding,ltime,Pi_Cam,bitrate,circular,pre_frames,camera
+    global lores_width,lores_height,vid_width,vid_height,picam2,encoder,encoding,vlen_time,Pi_Cam,bitrate,circular,pre_frames,camera
     # start circular buffer
     lsize = (lores_width,lores_height)
     picam2 = Picamera2(camera)
@@ -857,7 +865,7 @@ def start_buffer():
     picam2.pre_callback = apply_timestamp
     picam2.start_recording(encoder, circular)
     encoding = False
-    ltime = 0
+    vlen_time = 0
 
 start_buffer()
 
@@ -1218,6 +1226,13 @@ def main_menu():
         text(0,8,1,1,1,"Settings 1",14,7)
         text(0,9,1,0,1,"CAMERA 2",14,7)
         text(0,9,1,1,1,"Settings 2",14,7)
+    if zoom == 0:
+        button(0,10,0)
+        text(0,10,2,0,1,"Zoom",14,7)
+    else:
+        button(0,10,1)
+        text(0,10,1,0,1,"Zoom",14,0)
+        text(0,10,1,1,1,str(zoom),14,0)
     text(0,11,3,0,1,"EXIT",16,7)
     st = os.statvfs("/run/shm/")
     freeram = (st.f_bavail * st.f_frsize)/1100000
@@ -1229,7 +1244,7 @@ def main_menu():
     else:
          text(0,1,6,1,1,ss,12,0)
 
-# clear ram
+# clear ram of videos and pictures
 Rpegs = glob.glob('/run/shm/*.jpg')
 for tt in range(0,len(Rpegs)):
     os.remove(Rpegs[tt])
@@ -1380,8 +1395,6 @@ while True:
                     picam2.close()
                     picam2.stop()
                     Camera_Version()
-                     
-                     
                     # restart circular buffer
                     start_buffer()
                     if camera == 0:
@@ -1400,8 +1413,6 @@ while True:
                     picam2.close()
                     picam2.stop()
                     Camera_Version()
-                     
-                     
                     # restart circular buffer
                     start_buffer()
                     if camera == 0:
@@ -1554,14 +1565,21 @@ while True:
           image2 = pygame.surfarray.pixels3d(image)
           # CROP DETECTION AREA
           crop = image2[a-h_crop:a+h_crop,b-v_crop:b+v_crop]
+          if change_crop == 1:
+              # save reference image
+              im = Image.fromarray(crop)
+              im.save("/run/shm/ref.bmp")
+              change_crop = 0
+          if use_ref == 1 and os.path.exists("/run/shm/ref.bmp"):
+              # read reference image
+              ref = cv2.imread("/run/shm/ref.bmp", cv2.IMREAD_COLOR)
           if zoom > 0:
-              zc = [0,1,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1]
-              za = int((pre_width/2) * (1 - (zoom/10)))
+              za = int((pre_width/2)  * (1 - (zoom/10)))
               zb = int((pre_height/2) * (1 - (zoom/10)))
               z_crop = image2[int(pre_width/2)-za:int(pre_width/2)+za,int(pre_height/2)-zb:int(pre_height/2)+zb]
           if trace > 1:
             print ("CROP ", crop.size)
-          # COLOUR FILTER
+          # COLOUR FILTER for crop
           if col_filter < 3:
             gray = crop[:,:,col_filter]
           else:
@@ -1569,6 +1587,20 @@ while True:
           if col_filter < 4 and (preview == 1 or col_timer > 0):
             im = Image.fromarray(gray)
             im.save("/run/shm/qw.jpg")
+          if use_ref == 1 and os.path.exists("/run/shm/ref.bmp") and np.shape(gray) == np.shape(mask):
+              # COLOUR FILTER for reference
+              if col_filter < 3:
+                  rgray = ref[:,:,col_filter]
+              else:
+                  rgray = cv2.cvtColor(ref,cv2.COLOR_RGB2GRAY)
+              # add masks and compare image to reference image
+              if np.shape(rgray) == np.shape(mask):
+                  gray1 = gray * mask
+                  gray1 = gray1.astype(np.uint8)
+                  rgray1 = rgray * mask
+                  rgray1 = rgray1.astype(np.uint8)
+                  res  = cv2.matchTemplate(gray1,rgray1, cv2.TM_CCOEFF_NORMED)
+                  _, confidence, _, _ = cv2.minMaxLoc(res)
           gray = gray.astype(np.int16)
           detect = 0
            
@@ -1695,34 +1727,54 @@ while True:
             if use_gpio == 1:
                 if button_e_trig1.is_pressed:
                     record = 1
+                    
+            # continue recording with reference image confidence
+            if encoding and Capture == 1:
+                if use_ref == 1 and os.path.exists("/run/shm/ref.bmp") and confidence < con_hlimit and confidence > con_llimit :
+                    record = 1
+                    if menu == -1:
+                        text(0,0,2,0,1,"Recording",18,1)
+                else:
+                    record = 0
+                        
+            # save new reference image
+            elif not encoding and menu == -1:
+                if use_ref == 1 and os.path.exists("/run/shm/ref.bmp") and time.monotonic() - ref_timer > ref_time:
+                    im = Image.fromarray(crop)
+                    im.save("/run/shm/ref.bmp")
+                    ref_timer = time.monotonic()
             
+            # show recording time
             if encoding and menu == -1:
                 mn = int((time.monotonic() - ttime)/60)
                 sc = int((time.monotonic() - ttime) - (mn * 60))
                 text(0,0,2,1,1,("0" + str(mn))[-2:] + ":" + ("0" + str(sc))[-2:],15,0)
                     
             # detection of motion
-            if (((sar5/diff) * 100 > detection and (sar5/diff) * 100 < det_high and threshold != 0) or (time.monotonic() - timer10 > interval and timer10 != 0 and threshold == 0) or record == 1) and menu == -1:
+            if (((sar5/diff) * 100 > detection and (sar5/diff) * 100 < det_high and threshold != 0) or (time.monotonic() - lapse_timer > interval and lapse_timer != 0 and threshold == 0) or record == 1) and menu == -1:
                 if trace > 0:
                     print ("Step 6 DETECTED " + str(int((sar5/diff) * 100)))
-                if timer10 != 0:
-                   timer10 = time.monotonic()
+                if lapse_timer != 0:
+                   lapse_timer = time.monotonic()
                 if menu == 0:
                     text(0,1,1,0,1,"Low Detect "  + str(int((sar5/diff) * 100)) + "%",14,7)
-                if (Capture == 1 and on_sunrise == 0) or (Capture == 1 and on_sunrise == 1 and (hour* 60) + mins >= ss_on_time) or record == 1:
+                if (Capture == 1 and on_sunrise == 0) or (Capture == 1 and on_sunrise == 1 and (hour* 60) + mins >= ss_on_time) or (record == 1 and Capture == 1):
                     # start recording
                     if not encoding:
                         now = datetime.datetime.now()
                         timestamp = now.strftime("%y%m%d%H%M%S")
                         circular.open_output(PyavOutput("/run/shm/" + timestamp +".mp4"))
                         encoding = True
+                        record = 0
                         print("New Motion", timestamp)
                         ttime = time.monotonic()
                         image3 = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
                         # sound buzzer
                         if use_gpio == 1 and use_buzz == 1:
                             buzzer.value = 0.01
-                    ltime = time.monotonic()
+                    # retrigger timers
+                    vlen_time = time.monotonic()
+                    ref_timer = time.monotonic()
                     detect = 1
                     if use_gpio == 1 and use_buzz == 2:
                         buzzer.value = 0.1
@@ -1739,168 +1791,163 @@ while True:
                     if menu == -1:
                         button(0,0,1)
                         text(0,0,2,0,1,"Recording",18,3)
-                    start = time.monotonic()
-                    start2 = time.monotonic()
                     fx = 1
                     st = os.statvfs("/run/shm/")
-                    freeram = (st.f_bavail * st.f_frsize)/1100000
-                    record = 0
                     if use_gpio == 1:
                         buzzer.value = 0 
                   
                 else:
                     if Capture == 1 and menu == -1:
-                        text(0,0,3,1,1,str(interval - (int(time.monotonic() - timer10))),15,0)
+                        text(0,0,3,1,1,str(interval - (int(time.monotonic() - lapse_timer))),15,0)
                 if menu == 0:
                     text(0,1,2,0,1,"Low Detect " + str(int((sar5/diff) * 100)) + "%",14,7)
-            else:
-                # stop recording
-                if encoding and time.monotonic() - ltime > (v_length/1000) + pre_frames:
-                    circular.close_output()
-                    encoding = False
-                    if ES == 2 and use_gpio == 1:
-                        led_s_trig.off()
-                        led_s_focus.off()
-                    Videos = glob.glob(h_user + '/Videos/*.mp4')
-                    frames = len(Videos)
-                    Rideos = glob.glob('/run/shm/*.mp4')
-                    ram_frames = len(Rideos)
-                    for x in range(0,len(Rideos)):
-                         Videos.append(Rideos[x])
-                    Videos.sort()
-                    vf = str(ram_frames) + " - " + str(frames)
+            # stop recording
+            if (encoding and time.monotonic() - vlen_time > (v_length/1000) + pre_frames) or (encoding and time.monotonic() - ttime > max_vlen and record == 1):
+                circular.close_output()
+                encoding = False
+                record = 0
+                if ES == 2 and use_gpio == 1:
+                    led_s_trig.off()
+                    led_s_focus.off()
+                change_crop = 1
+                Videos = glob.glob(h_user + '/Videos/*.mp4')
+                frames = len(Videos)
+                Rideos = glob.glob('/run/shm/*.mp4')
+                ram_frames = len(Rideos)
+                for x in range(0,len(Rideos)):
+                     Videos.append(Rideos[x])
+                Videos.sort()
+                vf = str(ram_frames) + " - " + str(frames)
+                if menu == -1:
+                    text(0,0,3,1,1,vf,14,7)
+                cv2.imwrite("/run/shm/" + str(timestamp) + ".jpg",image3)
+                last = time.monotonic()    
+                st = os.statvfs("/run/shm/")
+                freeram = (st.f_bavail * st.f_frsize)/1100000
+                free = (os.statvfs('/'))
+                SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
+                ss = str(int(freeram)) + " - " + str(int(SD_storage))
+                Jpegs = glob.glob(h_user + '/Videos/*.jpg')
+                Rpegs = glob.glob('/run/shm/*.jpg')
+                for x in range(0,len(Rpegs)):
+                     Jpegs.append(Rpegs[x])
+                Jpegs.sort()
+                # if RAM space < RAM Limit
+                if ram_frames > 0 and freeram < ram_limit:
+                    if trace > 0:
+                        print ("Step 10 COPY TO SD")
                     if menu == -1:
-                        text(0,0,3,1,1,vf,14,7)
-                    cv2.imwrite("/run/shm/" + str(timestamp) + ".jpg",image3)
-                    last = time.monotonic()    
-                    st = os.statvfs("/run/shm/")
-                    freeram = (st.f_bavail * st.f_frsize)/1100000
-                    free = (os.statvfs('/'))
-                    SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
-                    ss = str(int(freeram)) + " - " + str(int(SD_storage))
-                    Jpegs = glob.glob(h_user + '/Videos/*.jpg')
+                        text(0,0,5,0,1,"CAPTURE",16,0)
+                        text(0,0,5,1,1," ",15,0)
+                    Videos = glob.glob('/run/shm/*.mp4')
+                    Videos.sort()
+                    # move Video RAM Files to SD card
+                    for xx in range(0,len(Videos)):
+                        if not os.path.exists(h_user + "/" + '/Videos/' + Videos[xx]):
+                            shutil.move(Videos[xx], h_user + '/Videos/')
                     Rpegs = glob.glob('/run/shm/*.jpg')
-                    for x in range(0,len(Rpegs)):
-                         Jpegs.append(Rpegs[x])
-                    Jpegs.sort()
-                    # if RAM space < RAM Limit
-                    if ram_frames > 0 and freeram < ram_limit:
-                        if trace > 0:
-                            print ("Step 10 COPY TO SD")
-                        if menu == -1:
-                            text(0,0,5,0,1,"CAPTURE",16,0)
-                            text(0,0,5,1,1," ",15,0)
-                        Videos = glob.glob('/run/shm/*.mp4')
-                        Videos.sort()
-                        # move Video RAM Files to SD card
-                        for xx in range(0,len(Videos)):
-                            if not os.path.exists(h_user + "/" + '/Videos/' + Videos[xx]):
-                                shutil.move(Videos[xx], h_user + '/Videos/')
-                        Rpegs = glob.glob('/run/shm/*.jpg')
-                        Rpegs.sort()
-                        # move Photos RAM Files to SD card
-                        for xx in range(0,len(Jpegs)):
-                            if not os.path.exists(h_user + "/" + '/Videos/' + Jpegs[xx]):
-                                shutil.move(Jpegs[xx], h_user + '/Videos/')
-                        # read list of existing RAM Video Files
-                        Rideos = glob.glob('/run/shm/*.mp4')
-                        Rideos.sort()
-                        ram_frames = len(Rideos)
-                        # read list of existing SD Card Video Files
-                        if trace > 0:
-                            print ("Step 11 READ SD FILES")
+                    Rpegs.sort()
+                    # move Photos RAM Files to SD card
+                    for xx in range(0,len(Jpegs)):
+                        if not os.path.exists(h_user + "/" + '/Videos/' + Jpegs[xx]):
+                            shutil.move(Jpegs[xx], h_user + '/Videos/')
+                    # read list of existing RAM Video Files
+                    Rideos = glob.glob('/run/shm/*.mp4')
+                    Rideos.sort()
+                    ram_frames = len(Rideos)
+                    # read list of existing SD Card Video Files
+                    if trace > 0:
+                        print ("Step 11 READ SD FILES")
+                    Videos = glob.glob(h_user + '/Videos/*.mp4')
+                    Videos.sort()
+                    frames = len(Videos)
+                    vf = str(ram_frames) + " - " + str(frames)
+                    if menu == 4:
+                        if ram_frames + frames > 0:
+                            text(0,4,3,1,1,str(ram_frames + frames),14,7)
+                        else:
+                            text(0,4,3,1,1," ",14,7)
+                # check free RAM and SD storage space
+                st = os.statvfs("/run/shm/")
+                freeram = (st.f_bavail * st.f_frsize)/1100000
+                free = (os.statvfs('/'))
+                SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
+                ss = str(int(freeram)) + "MB - " + str(int(SD_storage)) + "%"
+                if menu == -1:
+                    text(0,0,3,1,1,vf,14,0)
+                lapse_timer = time.monotonic()
+                oldimg = []
+                vidjr = 1
+                if ((ram_frames > 0 or frames > 0)  and menu == -1):
+                    text(0,6,1,0,1,"SHOW,EDIT or",13,7)
+                    text(0,6,1,1,1,"DELETE",14,7)
+                elif menu == -1:
+                    text(0,6,0,0,1,"SHOW,EDIT or",13,7)
+                    text(0,6,0,1,1,"DELETE",14,7)
+                USB_Files  = []
+                USB_Files  = (os.listdir(m_user))
+                if len(USB_Files) > 0:
+                    usedusb = os.statvfs(m_user + "/" + USB_Files[0] + "/")
+                    USB_storage = ((1 - (usedusb.f_bavail / usedusb.f_blocks)) * 100)
+                # check SD space for files ,move to usb stick (if available)
+                if SD_storage > SD_limit and len(USB_Files) > 0 and SD_F_Act == 2 and USB_storage < 90:
+                    if trace > 0:
+                        print ("Step 12 USED SD CARD > LIMIT")
+                    if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
+                        os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
+                    text(0,0,2,0,1,"CAPTURE",16,0)
+                    while SD_storage > SD_limit:
+                        Jpegs = glob.glob(h_user + '/Videos/*.jpg')
+                        Jpegs.sort()
+                        if len(Jpegs) > 0:
+                            for q in range(0,len(Jpegs)):
+                                if os.path.getsize(Jpegs[q]) > 0:
+                                    shutil.move(Jpegs[q],m_user + "/'" + USB_Files[0] + "'/Videos/")
                         Videos = glob.glob(h_user + '/Videos/*.mp4')
                         Videos.sort()
-                        frames = len(Videos)
-                        vf = str(ram_frames) + " - " + str(frames)
-                        if menu == 4:
-                            if ram_frames + frames > 0:
-                                text(0,4,3,1,1,str(ram_frames + frames),14,7)
-                            else:
-                                text(0,4,3,1,1," ",14,7)
-                    # check free RAM and SD storage space
-                    st = os.statvfs("/run/shm/")
-                    freeram = (st.f_bavail * st.f_frsize)/1100000
-                    free = (os.statvfs('/'))
-                    SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
-                    ss = str(int(freeram)) + "MB - " + str(int(SD_storage)) + "%"
-                    if menu == -1:
-                        text(0,0,3,1,1,vf,14,0)
-                    record = 0
-                    timer10 = time.monotonic()
-                    oldimg = []
-                    vidjr = 1
-
-                    if ((ram_frames > 0 or frames > 0)  and menu == -1):
-                        text(0,6,1,0,1,"SHOW,EDIT or",13,7)
-                        text(0,6,1,1,1,"DELETE",14,7)
-                    elif menu == -1:
-                        text(0,6,0,0,1,"SHOW,EDIT or",13,7)
-                        text(0,6,0,1,1,"DELETE",14,7)
-                    USB_Files  = []
-                    USB_Files  = (os.listdir(m_user))
-                    if len(USB_Files) > 0:
-                        usedusb = os.statvfs(m_user + "/" + USB_Files[0] + "/")
-                        USB_storage = ((1 - (usedusb.f_bavail / usedusb.f_blocks)) * 100)
-                    # check SD space for files ,move to usb stick (if available)
-                    if SD_storage > SD_limit and len(USB_Files) > 0 and SD_F_Act == 2 and USB_storage < 90:
-                        if trace > 0:
-                            print ("Step 12 USED SD CARD > LIMIT")
-                        if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
-                            os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
-                        text(0,0,2,0,1,"CAPTURE",16,0)
-                        while SD_storage > SD_limit:
-                            Jpegs = glob.glob(h_user + '/Videos/*.jpg')
-                            Jpegs.sort()
-                            if len(Jpegs) > 0:
-                                for q in range(0,len(Jpegs)):
-                                    if os.path.getsize(Jpegs[q]) > 0:
-                                        shutil.move(Jpegs[q],m_user + "/'" + USB_Files[0] + "'/Videos/")
-                            Videos = glob.glob(h_user + '/Videos/*.mp4')
-                            Videos.sort()
-                            if len(Videos) > 0:
-                                for q in range(0,len(Videos)):
-                                    if os.path.getsize(Videos[q]) > 0:
-                                        shutil.move(Videos[q],m_user + "/'" + USB_Files[0] + "'/Videos/")
-                            free = (os.statvfs('/'))
-                            SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
-                            ss = str(int(freeram)) + "MB - " + str(int(SD_storage)) + "%"
-                            if record == 0:
-                                text(0,1,6,1,1,ss,12,3)
-                            else:
-                                text(0,1,6,1,1,ss,12,0)
-                            
-                        text(0,0,6,0,1,"CAPTURE",16,0)
-                    elif SD_storage > SD_limit:
-                        #STOP CAPTURE IF NO MORE SD CARD SPACE AND NO USB STICK
-                        if trace > 0:
-                            print ("Step 12a sd card limit exceeded and no or full USB stick")
-                        if SD_F_Act == 0:
-                            Capture = 0 # stop
+                        if len(Videos) > 0:
+                            for q in range(0,len(Videos)):
+                                if os.path.getsize(Videos[q]) > 0:
+                                    shutil.move(Videos[q],m_user + "/'" + USB_Files[0] + "'/Videos/")
+                        free = (os.statvfs('/'))
+                        SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
+                        ss = str(int(freeram)) + "MB - " + str(int(SD_storage)) + "%"
+                        if record == 0:
+                            text(0,1,6,1,1,ss,12,3)
                         else:
-                            # remove oldest video and jpg from SD card
-                            Videos = glob.glob(h_user + '/Videos/*.mp4')
-                            Videos.sort()
-                            if os.path.getsize(Videos[q]) > 0:
-                                os.remove(Videos[0])
-                                os.remove(Videos[0][:-4] + ".jpg")
-                            frames -=1
-                            vf = str(ram_frames) + " - " + str(frames)
-                         
-                    if Capture == 0 and menu == -1:
-                        button(0,0,0)
-                        text(0,0,0,0,1,"CAPTURE",16,7)
-                        text(0,0,3,1,1,vf,14,7)
-                    elif menu == -1 :
-                        button(0,0,5)
-                        text(0,0,3,0,1,"CAPTURE",16,2)
+                            text(0,1,6,1,1,ss,12,0)
+                        
+                    text(0,0,6,0,1,"CAPTURE",16,0)
+                elif SD_storage > SD_limit:
+                    #STOP CAPTURE IF NO MORE SD CARD SPACE AND NO USB STICK
+                    if trace > 0:
+                        print ("Step 12a sd card limit exceeded and no or full USB stick")
+                    if SD_F_Act == 0:
+                        Capture = 0 # stop
+                    else:
+                        # remove oldest video and jpg from SD card
+                        Videos = glob.glob(h_user + '/Videos/*.mp4')
+                        Videos.sort()
+                        if os.path.getsize(Videos[q]) > 0:
+                            os.remove(Videos[0])
+                            os.remove(Videos[0][:-4] + ".jpg")
+                        frames -=1
                         vf = str(ram_frames) + " - " + str(frames)
-                        text(0,0,3,1,1,vf,14,2)
-                    if menu == -1:
-                        button(0,1,3)
-                        text(0,1,6,0,1,"RECORD",16,3)
-                        text(0,1,6,1,1,ss,12,3)
-                    pause_thread = False
+                         
+                if Capture == 0 and menu == -1:
+                    button(0,0,0)
+                    text(0,0,0,0,1,"CAPTURE",16,7)
+                    text(0,0,3,1,1,vf,14,7)
+                elif menu == -1 :
+                    button(0,0,5)
+                    text(0,0,3,0,1,"CAPTURE",16,2)
+                    vf = str(ram_frames) + " - " + str(frames)
+                    text(0,0,3,1,1,vf,14,2)
+                if menu == -1:
+                    button(0,1,3)
+                    text(0,1,6,0,1,"RECORD",16,3)
+                    text(0,1,6,1,1,ss,12,3)
+                pause_thread = False
         if show == 0 and show_vid == 1:
           if trace > 0:
               print ("SHOW FRAME")
@@ -1910,35 +1957,46 @@ while True:
               cropped = pygame.surfarray.make_surface(z_crop)
               cropped = pygame.transform.scale(cropped,(pre_width,pre_height))
           windowSurfaceObj.blit(cropped,(0, 0))
+          h_crop2 = h_crop * (1/(1-(zoom/10)))
+          v_crop2 = v_crop * (1/(1-(zoom/10)))
+          a1 = a - (pre_width/2)
+          b1 = b - (pre_height/2)
+          a2 = (pre_width/2) + (a1 * (1/(1-(zoom/10))))
+          b2 = (pre_height/2) + (b1 * (1/(1-(zoom/10))))
           # show colour filtering
           if col_filter < 4 and (preview == 1 or col_timer > 0) and os.path.exists('/run/shm/qw.jpg'):
             imageqw = pygame.image.load('/run/shm/qw.jpg')
-            if zoom == 0:
-                imagegray = pygame.transform.scale(imageqw, (v_crop*2,h_crop*2))
-            else:
-                imagegray = pygame.transform.scale(imageqw, (pre_height,pre_width))
+            imagegray = pygame.transform.scale(imageqw, (v_crop2*2,h_crop2*2))
             imagegray = pygame.transform.flip(imagegray, True, False)
             imagegray = pygame.transform.rotate(imagegray, 90)
-            
-            if zoom == 0:
-                windowSurfaceObj.blit(imagegray, (a-h_crop,b-v_crop))
+            if a2 + h_crop2 <= pre_width:
+                windowSurfaceObj.blit(imagegray,(a2 - h_crop2,b2 - v_crop2))
             else:
-                windowSurfaceObj.blit(imagegray, (0,0))
+                windowSurfaceObj.blit(imagegray,(a2 - h_crop2,b2 - v_crop2), (0, 0,pre_width-(a2-h_crop2),v_crop2*2))
           # show detected pixels if required
           if preview == 1 and np.shape(gray) == np.shape(oldimg):
-            if zoom == 0:
-                imagep = pygame.transform.scale(imagep, (h_crop*2,v_crop*2))
-                windowSurfaceObj.blit(imagep, (a-h_crop,b-v_crop))
-            elif preview == 1:
-                imagep = pygame.transform.scale(imagep, (pre_width,pre_height))
-                windowSurfaceObj.blit(imagep, (0,0))
-          if zoom == 0:
-              pygame.draw.rect(windowSurfaceObj, (0,255,0), Rect(a - h_crop,b - v_crop ,h_crop*2,v_crop*2), 2)
-              nmask = pygame.surfarray.make_surface(mask)
-              nmask = pygame.transform.scale(nmask, (h_crop*2,v_crop*2))
-              nmask.set_colorkey((0,0,50))
-              nmask.set_alpha(m_alpha)
-              windowSurfaceObj.blit(nmask, (a - h_crop,b - v_crop))
+            imagep = pygame.transform.scale(imagep, (h_crop2*2,v_crop2*2))
+            if a2 + h_crop2 <= pre_width:
+                windowSurfaceObj.blit(imagep,(a2 - h_crop2,b2 - v_crop2))
+            else:
+                windowSurfaceObj.blit(imagep,(a2 - h_crop2,b2 - v_crop2), (0, 0,pre_width-(a2-h_crop2),v_crop2*2))
+          # show detection area
+          if a2 + h_crop2 <= pre_width:
+              pygame.draw.rect(windowSurfaceObj, (0,255,0), Rect(a2 - h_crop2,b2 - v_crop2 ,h_crop2*2,v_crop2*2), 2)
+          elif a2 - h_crop2 < pre_width:
+              pygame.draw.line(windowSurfaceObj, (0,255,0),[a2 - h_crop2,b2 - v_crop2],[pre_width ,b2 - v_crop2], width=1)
+              pygame.draw.line(windowSurfaceObj, (0,255,0),[a2 - h_crop2,b2 - v_crop2],[a2 - h_crop2 ,b2 + v_crop2], width=1)
+              pygame.draw.line(windowSurfaceObj, (0,255,0),[a2 - h_crop2,b2 + v_crop2],[pre_width ,b2 + v_crop2], width=1)
+
+          # show mask
+          nmask = pygame.surfarray.make_surface(mask)
+          nmask = pygame.transform.scale(nmask,(h_crop2*2,v_crop2*2))
+          nmask.set_colorkey((0,0,50))
+          nmask.set_alpha(m_alpha)
+          if a2 + h_crop2 <= pre_width:
+              windowSurfaceObj.blit(nmask,(a2 - h_crop2,b2 - v_crop2))
+          else:
+              windowSurfaceObj.blit(nmask,(a2 - h_crop2,b2 - v_crop2), (0, 0,pre_width-(a2-h_crop2),v_crop2*2))
           if (Pi_Cam == 3 or Pi_Cam == 8) and fxz != 1 and zoom == 0 and menu == 3:
             pygame.draw.rect(windowSurfaceObj,(200,0,0),Rect(int(fxx*cwidth),int(fxy*cheight*.75),int(fxz*cwidth),int(fxz*cheight)),1)
           pygame.display.update(0,0,scr_width-bw,scr_height)
@@ -1988,8 +2046,24 @@ while True:
                 now = datetime.datetime.now()
                 timestamp = now.strftime("%y%m%d%H%M%S")
                 pygame.image.save(windowSurfaceObj, timestamp + ".png")
+            # ZOOM
+            elif mousex < pre_width and (event.button == 4 or event.button == 5):
+                if event.button == 4:
+                    zoom +=1
+                    zoom = min(zoom,9)
+                elif event.button == 5:
+                    zoom -=1
+                    zoom = max(zoom,0)
+                if menu == -1:
+                    if zoom == 0:
+                        button(0,10,0)
+                        text(0,10,2,0,1,"Zoom",14,7)
+                    else:
+                        button(0,10,1)
+                        text(0,10,1,0,1,"Zoom",14,0)
+                        text(0,10,1,1,1,str(zoom),14,0)
             # set crop position
-            elif mousex < pre_width and zoom == 0 and ((menu != 7 or ((Pi_Cam == 3 or Pi_Cam == 8) and AF_f_mode == 1)) or (Pi_Cam == 5 or Pi_Cam == 6)) and event.button != 3:
+            elif mousex < pre_width and ((menu != 7 or ((Pi_Cam == 3 or Pi_Cam == 8) and AF_f_mode == 1)) or (Pi_Cam == 5 or Pi_Cam == 6)) and event.button == 1:
                 if (Pi_Cam == 5 or Pi_Cam == 6):
                     fcount = 0
                 a = mousex
@@ -2002,25 +2076,38 @@ while True:
                    a = h_crop
                 if b - v_crop < 0:
                    b = v_crop
+                a1 = a - (pre_width/2)
+                b1 = b - (pre_height/2)
+                a = int((pre_width/2) + (a1 / (1/(1-(zoom/10)))))
+                b = int((pre_height/2) + (b1 / (1/(1-(zoom/10)))))
                 oldimg = []
                 save_config = 1
+                change_crop = 1
                 
             # set mask
-            if mousex < pre_width and zoom == 0 and event.button == 3 :
-                if mousex > a - h_crop and mousex < a + h_crop and mousey < b + v_crop and mousey > b - v_crop:
-                    mx = int(mousex - (a - h_crop)) 
-                    my = int(mousey - (b - v_crop))
+            if mousex < pre_width and event.button == 3 :
+                h_crop2 = h_crop * (1/(1-(zoom/10)))
+                v_crop2 = v_crop * (1/(1-(zoom/10)))
+                a1 = a - (pre_width/2)
+                b1 = b - (pre_height/2)
+                a2 = (pre_width/2) + (a1 * (1/(1-(zoom/10))))
+                b2 = (pre_height/2) + (b1 * (1/(1-(zoom/10))))
+                if mousex > a2 - h_crop2 and mousex < a2 + h_crop2 and mousey < b2 + v_crop2 and mousey > b2 - v_crop2:
+                    mx = int(mousex - (a2 - h_crop2))
+                    mx = int(mx / ((1/(1-(zoom/10)))))
+                    my = int(mousey - (b2 - v_crop2))
+                    my = int(my / ((1/(1-(zoom/10)))))
                     su = int(h_crop/10)
                     sl = 0-su
                     if mask[mx][my] == 0:
                         for aa in range(sl,su):
                             for bb in range(sl,su):
-                                if mx + bb > 0 and my + aa > 0 and mx + bb < h_crop * 2  and my + aa < v_crop * 2:
+                                if mx + bb > 0 and my + aa > 0 and mx + bb < h_crop2 * 2  and my + aa < v_crop2 * 2:
                                     mask[mx + bb][my + aa] = 1
                     else:
                         for aa in range(sl,su):
                             for bb in range(sl,su):
-                                if mx + bb > 0 and my + aa > 0 and mx + bb < h_crop * 2  and my + aa < v_crop * 2:
+                                if mx + bb > 0 and my + aa > 0 and mx + bb < h_crop2 * 2  and my + aa < v_crop2 * 2:
                                     mask[mx + bb][my + aa] = 0
                     nmask = pygame.surfarray.make_surface(mask)
                     nmask = pygame.transform.scale(nmask, (200,200))
@@ -2052,6 +2139,7 @@ while True:
                     AF_f_spot1 = 1
                 oldimg = []
                 save_config = 1
+                
             # keys   
             elif mousex > cwidth:
                 g = int(mousey/bh)
@@ -2130,7 +2218,7 @@ while True:
                         button(0,0,0)
                         text(0,0,0,0,1,"CAPTURE",16,7)
                         text(0,0,3,1,1,vf,14,7)
-                        timer10 = 0
+                        lapse_timer = 0
                     else:
                         num = 0
                         button(0,0,4)
@@ -2297,7 +2385,7 @@ while True:
 
                             text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
                             if AF_f_spot == 1:
-                                text(0,0,3,1,1,"Spot",14,7)
+                                text(0,4,3,1,1,"Spot",14,7)
                         if Pi_Cam > -1:
                             text(0,1,1,0,1,"IRF ON time",14,7)
                             if IRF == 0:
@@ -2467,19 +2555,22 @@ while True:
                         else:
                             text(0,4,3,1,1,"Yes",14,7)
                         if len(Jpegs) > 0:
-                            if frames > 0:
-                                text(0,5,2,0,1,"MOVE MP4s",14,7)
-                                text(0,5,2,1,1,"to USB",14,7)
-                            else:
-                                text(0,5,0,0,1,"MOVE MP4s",14,7)
-                                text(0,5,0,1,1,"to USB",14,7)
                             text(0,7,2,0,1,"MAKE FULL",14,7)
                             text(0,7,2,1,1,"MP4",14,7)
                             text(0,6,3,0,1,"DELETE ",14,7)
                             text(0,6,3,1,1,"VIDEO ",14,7)
+                            if frames > 0:
+                                text(0,8,2,0,1,"MOVE MP4",14,7)
+                                text(0,8,2,1,1,"to USB",14,7)
+                                text(0,9,2,0,1,"MOVE MP4s",14,7)
+                                text(0,9,2,1,1,"to USB",14,7)
+                            else:
+                                text(0,8,0,0,1,"MOVE MP4",14,7)
+                                text(0,8,0,1,1,"to USB",14,7)
+                                text(0,9,0,0,1,"MOVE MP4s",14,7)
+                                text(0,9,0,1,1,"to USB",14,7)
                             text(0,10,3,0,1,"DELETE",14,7)
                             text(0,10,3,1,1,"ALL VIDS  ",14,7)
-
                         text(0,11,1,0,1,"MAIN MENU",14,7)
                        
                     elif g == 7:
@@ -2535,6 +2626,11 @@ while True:
                                 text(0,8,3,1,1,"Short",14,7)
                             else:
                                 text(0,8,3,1,1,"Long",14,7)
+                        text(0,9,2,0,1,"Use Ref",14,7)
+                        if use_ref == False:
+                            text(0,9,3,1,1,"OFF",14,7)
+                        else:
+                            text(0,9,3,1,1,"ON",14,7)
                         text(0,10,2,0,1,"Det Speed",14,7)
                         text(0,10,3,1,1,str(dspeed),14,7)
                         USB_Files  = []
@@ -2680,7 +2776,23 @@ while True:
                         # restart circular buffer
                         start_buffer()
                         set_parameters1()
-                       
+                        
+                    elif g == 10:
+                        # ZOOM
+                        if (h == 1 and event.button == 1) or event.button == 4:
+                            zoom +=1
+                            zoom = min(zoom,9)
+                        else:
+                            zoom -=1
+                            zoom = max(zoom,0)
+                        if zoom > 0:
+                            button(0,10,1)
+                            text(0,10,1,0,1,"Zoom",14,0)
+                            text(0,10,1,1,1,str(zoom),14,0)
+                        else:
+                            zoom = 0
+                            button(0,10,0)
+                            text(0,10,2,0,1,"Zoom",14,7)
 
                                         
 # MENU 0 === DETECTION =================================================================================================
@@ -2729,15 +2841,15 @@ while True:
                         threshold = min(threshold,threshold2 - 1)
                         text(0,3,2,0,1,"Low Threshold",14,7)
                         text(0,3,3,1,1,str(threshold),14,7)
-                        timer10 = 0
+                        lapse_timer = 0
                     else:
                         threshold -=1
                         threshold = max(threshold,0)
                         text(0,3,2,0,1,"Low Threshold",14,7)
                         text(0,3,3,1,1,str(threshold),14,7)
-                        timer10 = 0
+                        lapse_timer = 0
                     if threshold == 0:
-                        timer10 = time.monotonic()
+                        lapse_timer = time.monotonic()
                         if v_length > interval * 1000:
                            v_length = (interval - 1 * 1000)
                     save_config = 1
@@ -2781,6 +2893,7 @@ while True:
                           h_crop = max(h_crop,1)
                       text(0,5,3,1,1,str(h_crop  * 2),14,7)
                       mask,change = MaskChange()
+                      change_crop = 1
                       save_config = 1
                     
                   elif g == 6:
@@ -2806,6 +2919,7 @@ while True:
                           v_crop = max(v_crop,1)
                       text(0,6,3,1,1,str(v_crop * 2),14,7)
                       mask,change = MaskChange()
+                      change_crop = 1
                       save_config = 1                    
 
                   elif g == 7:
@@ -3824,63 +3938,6 @@ while True:
                     else:
                         text(0,4,3,1,1,"No",14,7)
                         
-                  elif g == 5:
-                    #move MP4s to usb
-                    menu_timer  = time.monotonic()
-                    if os.path.exists('mylist.txt'):
-                        os.remove('mylist.txt')
-                    USB_Files  = []
-                    USB_Files  = (os.listdir(m_user))
-                    if len(USB_Files) > 0 and frames > 0:
-                        pause_thread = True
-                        if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
-                            os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
-                        text(0,5,3,0,1,"MOVING",14,7)
-                        text(0,5,3,1,1,"MP4s",14,7)
-                        for xx in range(0,len(Videos)):
-                            movi = Videos[xx].split("/")
-                            image = pygame.image.load(Jpegs[xx])
-                            cropped = pygame.transform.scale(image, (pre_width,pre_height))
-                            windowSurfaceObj.blit(cropped, (0, 0))
-                            text(0,1,3,1,1,str(xx+1) + " / " + str(len(Videos)),14,7)
-                            pygame.display.update()
-                            if movi[1] == "home":
-                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
-                                    os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4])
-                            elif movi[1] == "run":
-                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]):
-                                    os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3])
-                            shutil.copy(Videos[xx],m_user + "/" + USB_Files[0] + "/Videos/")
-                            if os.path.exists(Videos[xx][:-4] + ".jpg"):
-                                shutil.copy(Videos[xx][:-4] + ".jpg",m_user + "/" + USB_Files[0] + "/Pictures/")
-                            if movi[1] == "home":
-                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
-                                    os.remove(Videos[xx])
-                                    if Videos[xx][len(Videos[xx]) - 5:] == "f.mp4":
-                                        if os.path.exists(Videos[xx][:-5] + ".jpg"):
-                                            os.remove(Videos[xx][:-5] + ".jpg")
-                                    else:
-                                        if os.path.exists(Videos[xx][:-4] + ".jpg"):
-                                            os.remove(Videos[xx][:-4] + ".jpg")
-                            elif movi[1] == "run":
-                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]):
-                                    os.remove(Videos[xx])
-                                    if Videos[xx][len(Videos[xx]) - 5:] == "f.mp4":
-                                        if os.path.exists(Videos[xx][:-5] + ".jpg"):
-                                            os.remove(Videos[xx][:-5] + ".jpg")
-                                    else:
-                                        if os.path.exists(Videos[xx][:-4] + ".jpg"):
-                                            os.remove(Videos[xx][:-4] + ".jpg")
-                        Videos = glob.glob(h_user + '/Videos/*.mp4')
-                        Jpegs = glob.glob(h_user + '/Videos/*.jpg')
-                        for xx in range(0,len(Jpegs)):
-                            os.remove(Jpegs[xx])
-                        frames = len(Videos)
-                        text(0,5,0,0,1,"MOVE MP4s",14,7)
-                        text(0,5,0,1,1,"to USB",14,7)
-                    pause_thread = False
-                    main_menu()
-                    
                   elif g == 6 and show == 1 and frames + ram_frames > 0 and (frames > 0 or ram_frames > 0) and event.button == 3:
                     # DELETE A VIDEO
                     menu_timer  = time.monotonic()
@@ -3938,12 +3995,112 @@ while True:
                           pass
                     else:
                         show = 0
-                        main_menu()
                         q = 0
-                        of = 0
                         ram_frames = 0
                         frames = 0
-                        snaps = 0
+                        main_menu()
+                                                 
+                    if ram_frames + frames > 0 and menu == 4:
+                        text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
+                    elif menu == 4:
+                        text(0,1,3,1,1," ",14,7)
+                    vf = str(ram_frames) + " - " + str(frames)
+                    pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,cheight,scr_width-bw,scr_height))
+                    oldimg = []
+                    time.sleep(0.5)
+                    
+                  elif g == 8:
+                    #move a MP4 to usb
+                    menu_timer  = time.monotonic()
+                    if os.path.exists('mylist.txt'):
+                        os.remove('mylist.txt')
+                    USB_Files  = []
+                    USB_Files  = (os.listdir(m_user))
+                    if len(USB_Files) > 0 and frames > 0:
+                        pause_thread = True
+                        if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
+                            os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
+                        text(0,8,3,0,1,"MOVING",14,7)
+                        text(0,8,3,1,1,"MP4",14,7)
+                        movi = Videos[q].split("/")
+                        if movi[1] == "home":
+                            if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
+                                os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4])
+                        elif movi[1] == "run":
+                            if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]):
+                                os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3])
+                        shutil.copy(Videos[q],m_user + "/" + USB_Files[0] + "/Videos/")
+                        if os.path.exists(Videos[q][:-4] + ".jpg"):
+                            shutil.copy(Videos[q][:-4] + ".jpg",m_user + "/" + USB_Files[0] + "/Pictures/")
+                        if movi[1] == "home":
+                            if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
+                                os.remove(Videos[q])
+                                if Videos[q][len(Videos[q]) - 5:] == "f.mp4":
+                                    if os.path.exists(Videos[q][:-5] + ".jpg"):
+                                        os.remove(Videos[q][:-5] + ".jpg")
+                                else:
+                                    if os.path.exists(Videos[q][:-4] + ".jpg"):
+                                        os.remove(Videos[q][:-4] + ".jpg")
+                        elif movi[1] == "run":
+                            if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]):
+                                os.remove(Videos[q])
+                                if Videos[q][len(Videos[q]) - 5:] == "f.mp4":
+                                    if os.path.exists(Videos[q][:-5] + ".jpg"):
+                                        os.remove(Videos[q][:-5] + ".jpg")
+                                else:
+                                    if os.path.exists(Videos[q][:-4] + ".jpg"):
+                                        os.remove(Videos[q][:-4] + ".jpg")
+                        Videos = glob.glob(h_user + '/Videos/*.mp4')
+                        frames = len(Videos)
+                        Rideos = glob.glob('/run/shm/*.mp4')
+                        ram_frames = len(Rideos)
+                        for x in range(0,len(Rideos)):
+                            Videos.append(Rideos[x])
+                        Videos.sort()
+                        Jpegs = glob.glob(h_user + '/Videos/*.jpg')
+                        Rpegs = glob.glob('/run/shm/*.jpg')
+                        for x in range(0,len(Rpegs)):
+                           Jpegs.append(Rpegs[x])
+                        Jpegs.sort()
+                        frames = len(Videos)
+                        text(0,8,2,0,1,"MOVE MP4",14,7)
+                        text(0,8,2,1,1,"to USB",14,7)
+                        Videos = glob.glob(h_user + '/Videos/*.mp4')
+                        if q > len(Videos)-1:
+                            q -=1
+                        if len(Videos) > 0:
+                          try:
+                            image = pygame.image.load(Videos[q][:-4] + ".jpg")
+                            cropped = pygame.transform.scale(image, (pre_width,pre_height))
+                            windowSurfaceObj.blit(cropped, (0, 0))
+                            duration = 0
+                            mp4 = Jpegs[q][:-4] + ".mp4"
+                            cap = cv2.VideoCapture(mp4)
+                            if not cap.isOpened():
+                                time.sleep(0.1)
+                            else:
+                                fpsv = cap.get(cv2.CAP_PROP_FPS)
+                                frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                                duration = frame_count / fpsv if fpsv else 0
+                                cap.release()
+                            fontObj = pygame.font.Font(None, 25)
+                            msgSurfaceObj = fontObj.render(str(mp4) + " : " + str(int(duration)) + "s", False, (255,255,0))
+                            msgRectobj = msgSurfaceObj.get_rect()
+                            msgRectobj.topleft = (10,10)
+                            windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
+                            msgSurfaceObj = fontObj.render((str(q+1) + "/" + str(ram_frames + frames)), False, (255,0,0))
+                            msgRectobj = msgSurfaceObj.get_rect()
+                            msgRectobj.topleft = (10,35)
+                            windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
+                            pygame.display.update()
+                          except:
+                              pass
+                        else:
+                            show = 0
+                            q = 0
+                            ram_frames = 0
+                            frames = 0
+                            main_menu()
                          
                     if ram_frames + frames > 0 and menu == 4:
                         text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
@@ -3953,7 +4110,67 @@ while True:
                     pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,cheight,scr_width-bw,scr_height))
                     oldimg = []
                     time.sleep(0.5)
-                        
+                    pause_thread = False
+                    if len(Videos) == 0:
+                        main_menu()
+                  
+                  elif g == 9:
+                    #move MP4s to usb
+                    menu_timer  = time.monotonic()
+                    if os.path.exists('mylist.txt'):
+                        os.remove('mylist.txt')
+                    USB_Files  = []
+                    USB_Files  = (os.listdir(m_user))
+                    if len(USB_Files) > 0 and frames > 0:
+                        pause_thread = True
+                        if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
+                            os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
+                        text(0,9,3,0,1,"MOVING",14,7)
+                        text(0,9,3,1,1,"MP4s",14,7)
+                        for xx in range(0,len(Videos)):
+                            movi = Videos[xx].split("/")
+                            image = pygame.image.load(Jpegs[xx])
+                            cropped = pygame.transform.scale(image, (pre_width,pre_height))
+                            windowSurfaceObj.blit(cropped, (0, 0))
+                            text(0,1,3,1,1,str(xx+1) + " / " + str(len(Videos)),14,7)
+                            pygame.display.update()
+                            if movi[1] == "home":
+                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
+                                    os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4])
+                            elif movi[1] == "run":
+                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]):
+                                    os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3])
+                            shutil.copy(Videos[xx],m_user + "/" + USB_Files[0] + "/Videos/")
+                            if os.path.exists(Videos[xx][:-4] + ".jpg"):
+                                shutil.copy(Videos[xx][:-4] + ".jpg",m_user + "/" + USB_Files[0] + "/Pictures/")
+                            if movi[1] == "home":
+                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
+                                    os.remove(Videos[xx])
+                                    if Videos[xx][len(Videos[xx]) - 5:] == "f.mp4":
+                                        if os.path.exists(Videos[xx][:-5] + ".jpg"):
+                                            os.remove(Videos[xx][:-5] + ".jpg")
+                                    else:
+                                        if os.path.exists(Videos[xx][:-4] + ".jpg"):
+                                            os.remove(Videos[xx][:-4] + ".jpg")
+                            elif movi[1] == "run":
+                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]):
+                                    os.remove(Videos[xx])
+                                    if Videos[xx][len(Videos[xx]) - 5:] == "f.mp4":
+                                        if os.path.exists(Videos[xx][:-5] + ".jpg"):
+                                            os.remove(Videos[xx][:-5] + ".jpg")
+                                    else:
+                                        if os.path.exists(Videos[xx][:-4] + ".jpg"):
+                                            os.remove(Videos[xx][:-4] + ".jpg")
+                        Videos = glob.glob(h_user + '/Videos/*.mp4')
+                        Jpegs = glob.glob(h_user + '/Videos/*.jpg')
+                        for xx in range(0,len(Jpegs)):
+                            os.remove(Jpegs[xx])
+                        frames = len(Videos)
+                        text(0,9,0,0,1,"MOVE MP4s",14,7)
+                        text(0,9,0,1,1,"to USB",14,7)
+                    pause_thread = False
+                    main_menu()
+                          
                   elif g == 10:
                     # DELETE ALL VIDEOS
                     menu_timer  = time.monotonic()
@@ -4260,6 +4477,19 @@ while True:
                         text(0,8,3,1,1,"Short",14,7)
                     else:
                         text(0,8,3,1,1,"Long",14,7)
+                    save_config = 1
+                    
+                  elif g == 9:
+                    # Use Reference Image
+                    use_ref +=1
+                    if use_ref > 1:
+                        use_ref = 0
+                    if use_ref == 0:
+                        text(0,9,3,1,1,"OFF",14,7)
+                    else:
+                        text(0,9,3,1,1,"ON",14,7)
+                        im = Image.fromarray(crop)
+                        im.save("/run/shm/ref.bmp")
                     save_config = 1
                     
                   elif g == 10:
@@ -4842,6 +5072,7 @@ while True:
                 config[84] = int((sr_offset * 100) + 1200)
                 config[85] = int((ss_offset * 100) + 1200)
                 config[86] = m_alpha 
+                config[87] = use_ref
               
                 with open(config_file, 'w') as f:
                     for item in config:
