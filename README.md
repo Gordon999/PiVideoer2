@@ -33,7 +33,7 @@ mp4s captured in /home/《user》/Videos.
 
 To install:
 
-Install latest FULL RaspiOS based on Bullseye or Bookworm (tested with FULL 32bit and 64bit versions)
+Install latest FULL RaspiOS
 
 sudo apt install python3-opencv
 
