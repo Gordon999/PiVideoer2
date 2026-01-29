@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Copyright (c) 2025
+"""Copyright (c) 2026
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.40"
+version = "1.41"
 
 import time
 import cv2
@@ -192,7 +192,7 @@ max_vlen      = 120     # MAX video length in seconds (only used by use_ref)
 # * adjustable whilst running
 
 # initialise parameters
-config_file   = "PiVideoconfig044.txt"
+config_file   = "PiVideoconfig045.txt"
 pre_width     = int((scr_width/8)*7)
 pre_height    = scr_height
 old_camera    = camera
@@ -1754,8 +1754,8 @@ while True:
             if (((sar5/diff) * 100 > detection and (sar5/diff) * 100 < det_high and threshold != 0) or (time.monotonic() - lapse_timer > interval and lapse_timer != 0 and threshold == 0) or record == 1) and menu == -1:
                 if trace > 0:
                     print ("Step 6 DETECTED " + str(int((sar5/diff) * 100)))
-                if lapse_timer != 0:
-                   lapse_timer = time.monotonic()
+                #if lapse_timer != 0:
+                #   lapse_timer = time.monotonic()
                 if menu == 0:
                     text(0,1,1,0,1,"Low Detect "  + str(int((sar5/diff) * 100)) + "%",14,7)
                 if (Capture == 1 and on_sunrise == 0) or (Capture == 1 and on_sunrise == 1 and (hour* 60) + mins >= ss_on_time) or (record == 1 and Capture == 1):
@@ -1766,6 +1766,7 @@ while True:
                         circular.open_output(PyavOutput("/run/shm/" + timestamp +".mp4"))
                         encoding = True
                         record = 0
+                        lapse_timer = time.monotonic()
                         print("New Motion", timestamp)
                         ttime = time.monotonic()
                         image3 = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
@@ -1875,7 +1876,7 @@ while True:
                 ss = str(int(freeram)) + "MB - " + str(int(SD_storage)) + "%"
                 if menu == -1:
                     text(0,0,3,1,1,vf,14,0)
-                lapse_timer = time.monotonic()
+                #lapse_timer = time.monotonic()
                 oldimg = []
                 vidjr = 1
                 if ((ram_frames > 0 or frames > 0)  and menu == -1):
@@ -2225,6 +2226,7 @@ while True:
                         text(0,0,6,0,1,"CAPTURE",16,4)
                         text(0,0,3,1,1,vf,14,4)
                     old_cap = Capture
+                    lapse_timer = time.monotonic()
                     save_config = 1
 
                 elif g == 1 and menu == -1:
@@ -2850,8 +2852,8 @@ while True:
                         lapse_timer = 0
                     if threshold == 0:
                         lapse_timer = time.monotonic()
-                        if v_length > interval * 1000:
-                           v_length = (interval - 1 * 1000)
+                        if v_length + (pre_frames * 1000) > interval * 1000 and interval > 0:
+                           interval = int(v_length/1000) + (pre_frames) + 1
                     save_config = 1
 
                   elif g == 4:
@@ -3477,6 +3479,8 @@ while True:
                     else:
                         interval -=1
                         interval = max(interval,0)
+                    if threshold == 0:
+                        interval = max(int(v_length/1000) + pre_frames + 1,interval)
                     text(0,0,3,1,1,str(interval) + " Secs",14,7)
                     save_config = 1
 
@@ -3495,6 +3499,11 @@ while True:
                            v_length +=100
                         v_length = min(v_length,100000)
                     text(0,1,3,1,1,str(v_length/1000) + " Secs",14,7)
+                    if threshold == 0:
+                        lapse_timer = time.monotonic()
+                        if v_length + (pre_frames * 1000) > interval * 1000 and interval > 0:
+                           interval = int(v_length/1000) + (pre_frames) + 1
+                           text(0,0,3,1,1,str(interval) + " Secs",14,7)
                     save_config = 1
                     
                   elif g == 2:
@@ -3512,6 +3521,11 @@ while True:
                     picam2.start_recording(encoder, circular)
                     time.sleep(pre_frames)
                     text(0,2,3,1,1,str(pre_frames) + " Secs",14,7)
+                    if threshold == 0:
+                        lapse_timer = time.monotonic()
+                        if v_length + (pre_frames * 1000) > interval * 1000 and interval > 0:
+                           interval = int(v_length/1000) + (pre_frames) + 1
+                           text(0,0,3,1,1,str(interval) + " Secs",14,7)
                     save_config = 1
                   
                   elif g == 3:
