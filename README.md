@@ -25,6 +25,9 @@ Makes individual mp4s, and can make a FULL MP4 of MP4s stored.
 
 mp4s captured in /home/《user》/Videos.
 
+To use the camera in timelapse mode set Interval to required interval time, Video Length and pre frames as required, and then set detection low threshold to 0.
+set to capture.
+
 
 ## Screenshot
 
