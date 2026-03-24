@@ -44,6 +44,20 @@ sudo pip3 install ephem --break-system-packages (or use venv!!)
 
 Download PiVideoer2.py and copy to /home/《user》
 
+To run at boot...
+
+Note: change XXXX to your username)
+
+sudo nano /home/XXXX/.config/labwc/autostart
+
+type in...
+
+/usr/bin/python3 /home/XXXX/PiVideoer2.py
+
+press Ctrl and X, Y, return to save..
+
+Reboot
+
 Note buttons with RED text use right mouse click, others left click. Click on left or right part of button as appropriate.
 
 If you want a version that continuously records videos try https://github.com/Gordon999/PiVideoer3
