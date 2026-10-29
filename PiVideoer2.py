@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.45"
+version = "1.76"
 
 import time
 import cv2
@@ -28,7 +28,7 @@ from pygame.locals import *
 from PIL import Image
 import os,glob
 import signal
-import datetime
+from datetime import datetime
 import shutil
 import glob
 from gpiozero import Button
@@ -42,31 +42,35 @@ from picamera2 import Picamera2, Preview, MappedArray
 from picamera2.encoders import H264Encoder
 from picamera2.outputs import CircularOutput2, PyavOutput
 from libcamera import controls
-import threading
-from queue import Queue
-import ephem
-import datetime
 
 # Your Location
-you = ephem.Observer()
-you.lat       = '51.0000000' # set your location latitude
-you.lon       = '-1.0000000' # set your location longtitude
-you.elevation = 100          # set your location height in metres
-UTC_offset    = 0            # set your local time offset to UTC in hours, 1.5 = 1 hr 30mins
-on_sunrise    = 1            # set to 1 to only start recording at sunrise  
-sd_mode       = 1            # shutdown Mode,    0 = set time, 1 = use sunset *
-sd_hour       = 0            # Shutdown Hour,    0 - 23, 00:00 will NOT SHUTDOWN *
-sd_mins       = 0            # Shutdown Minutes, 0 - 59, 00:00 will NOT SHUTDOWN *
-sr_offset     = 0            # offset in hours to start recording before/after sunrise (if on_sunrise = 1), -0.5 = sunrise - 30mins *
-ss_offset     = 0            # offset in hours to shutdown after/before sunset (if sd_mode = 1) , 0.5 = sunset + 30mins *
+your_lat      = '51.00' # set your location latitude
+your_long     = '-1.10' # set your location longtitude
+your_elev     = 100     # set your location height in metres
+UTC_offset    = 0       # set your local time offset to UTC in hours, 1.5 = 1hr 30mins
+auto_offset   = 1       # set UTC offset automatically, set = 1
+st_mode       = 1       # SUN times Mode,   0 = set times, 1 = use suntimes (sudo pip install ephem)*
+sd_hour       = 0       # Shutdown Hour,    0 - 23, 00:00 will NOT SHUTDOWN *
+sd_mins       = 0       # Shutdown Minutes, 0 - 59, 00:00 will NOT SHUTDOWN *
+on_sunrise    = 1       # set to 1 to only enable capturing at sunrise / set time, set to 0 to enable capturing at boot.
+ss_on_hour    = 5       # Start Recording Hour,    0 - 23 *
+ss_on_mins    = 10      # Start Recording Minutes, 0 - 59 *
+sr_offset     = 0       # offset in hours to start recording before/after sunrise (if st_mode = 1 and on_sunrise = 1), -0.5 = sunrise - 30mins *
+ss_offset     = 0       # offset in hours to shutdown after/before sunset (if st_mode = 1) , 0.5 = sunset + 30mins *
 
 # * adjustable whilst running and saved in config
-
+   
 # set screen size
-scr_width  = 800
-scr_height = 480
+pygame.init()
+infoObject = pygame.display.Info()
+if infoObject.current_w > 1280:
+	scr_width  = 1280
+	scr_height = 720
+else:
+	scr_width  = infoObject.current_w
+	scr_height = infoObject.current_h
 
-# use GPIO for external camera triggers, IR switch and/or optional FAN (NOT Pi5 Active Cooler / Case Fan).
+# use GPIO for external camera triggers, IR switch and/or optional FAN (NOT Pi5 Active Cooler/Case Fan) or BUZZER.
 # DISABLE Pi FAN CONTROL in Preferences > Performance to GPIO 14 !!
 use_gpio   = 1
 
@@ -81,10 +85,10 @@ e_trig1    = 16
 sw_ir      = 26
 sw_ir1     = 19
 
-# IR light
+# IR light (if use_gpio = 1)
 ir_light   = 13
 
-# buzzer
+# buzzer (if use_gpio = 1)
 e_buzz     = 12
 use_buzz   = 1       # enable buzzer on capture, 1 on starting video, 2 on detection *
 
@@ -94,176 +98,202 @@ fan        = 14
 fan_ctrl   = 1  # 0 for OFF.
 
 # enable watchdog
-watch      = False
+watch      = False    # True or False, will reboot if fails
 
 # set default config parameters
-v_crop        = 150      # size of vertical detection window *
-h_crop        = 110      # size of horizontal detection window *
-threshold     = 15       # minm change in pixel luminance *
-threshold2    = 255      # maxm change in pixel luminance *
-detection     = 10       # % of pixels detected to trigger, in % *
-det_high      = 100      # max % of pixels detected to trigger, in %  *
-col_filter    = 3        # 3 = FULL, SEE COL_FILTERS *
-nr            = 2        # Noise reduction, 0 off, 1 low, 2 high *
-pre_frames    = 5        # seconds *
-dspeed        = 100      # detection speed 1-100, 1 = slowest *
-mp4_fps       = 30       # set MP4 fps *
-mp4_anno      = 1        # mp4_annotate MP4s with date and time , 1 = yes, 0 = no *
-SD_F_Act      = 0        # Action on SD FULL, 0 = STOP, 1 = DELETE OLDEST VIDEO, 2 = COPY TO USB (if fitted) *
-interval      = 0        # seconds of wait between capturing Pictures / for TIMELAPSE set interval and set threshold to 0*
-v_length      = 20000    # video length in mS *
-bitrate       = 8000000 # video bitrate
-use_ref       = 1        # use reference image, 0 = NO, 1 = YES *
+v_crop      = 150     # size of vertical detection window *
+h_crop      = 110     # size of horizontal detection window *
+threshold   = 15      # minm change in pixel luminance *
+threshold2  = 255     # maxm change in pixel luminance *
+detection   = 10      # % of pixels detected to trigger, in % *
+det_high    = 100     # max % of pixels detected to trigger, in %  *
+col_filter  = 3       # 3 = FULL, (SEE COL_FILTERS below)*
+nr          = 2       # Detection Noise reduction, 0 off, 1 low, 2 high *
+pre_frames  = 5       # seconds *
+dspeed      = 100     # detection speed 1-100, 1 = slowest *
+mp4_fps     = 25      # set MP4 fps *
+mp4_anno    = 1       # mp4_annotate MP4s with date and time , 1 = yes, 0 = no *
+SD_F_Act    = 0       # Action on SD FULL, 0 = STOP, 1 = DELETE OLDEST VIDEO, 2 = COPY TO USB (if fitted) *
+interval    = 0       # seconds of wait between capturing Pictures / for TIMELAPSE set interval and set threshold to 0*
+v_length    = 10000   # video length in mS *
+bitrate     = 8       # video bitrate MB *
+use_ref     = 0       # use reference image, 0 = NO, 1 = YES *
 
 # setup for 1st camera
-mode          = 1       # set camera mode *
-speed         = 18      # set manual shutter , in shutters list *
-gain          = 0       # set gain , 0 = AUTO *
-brightness    = 0       # set camera brightness *
-contrast      = 7       # set camera contrast *
-awb           = 0       # auto white balance, 0 = AUTO *
-red           = 1.5     # red balance *
-blue          = 1.5     # blue balance *
-meter         = 0       # metering *
-ev            = -4      # eV *
-denoise       = 0       # denoise level *
-quality       = 90      # video quality *
-sharpness     = 4       # sharpness *
-saturation    = 10      # saturation *
-fps           = 30      # camera fps
-AF_f_mode     = 1       # AF camera focus mode *
-AF_f_spot     = 0       # AF spot mode
-AF_focus      = 1       # AF camera manual focus default *
-IRF           = 0       # Waveshare IR Filter switch MODE *
-IRF_on        = 0       # Waveshare IR Filter switch ON/OFF *
-ir_on_hour    = 20      # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
-ir_of_hour    = 7       # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
-ir_on_mins    = 0       # Switch IR Filter ON mins, 0 - 59 *
-ir_of_mins    = 0       # Switch IR Filter OFF mins, 0 - 59 *
+mode         = 1       # set camera mode (see modes below) *
+speed        = 18      # set manual shutter , in shutters list *
+gain         = 0       # set gain , 0 = AUTO *
+brightness   = 0       # set camera brightness *
+contrast     = 7       # set camera contrast *
+awb          = 0       # auto white balance, 0 = AUTO (see awbs below) *
+red          = 1.5     # red balance *
+blue         = 1.5     # blue balance *
+meter        = 0       # metering (see meters below)*
+ev           = -4      # eV *
+denoise      = 0       # denoise level (see denoises below)*
+quality      = 90      # video quality 
+sharpness    = 4       # sharpness *
+saturation   = 10      # saturation *
+fps          = 25      # camera fps
+AF_f_mode    = 1       # AF camera focus mode (see AF_f_modes below)*
+AF_f_spot    = 0       # AF spot mode *
+AF_focus     = 1.000   # AF camera manual focus default, in meters *
+IRF          = 0       # Waveshare IR Filter switch MODE *
+IRF_on       = 0       # Waveshare IR Filter switch ON/OFF *
+ir_on_hour   = 20      # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
+ir_of_hour   = 7       # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
+ir_on_mins   = 0       # Switch IR Filter ON mins, 0 - 59 *
+ir_of_mins   = 0       # Switch IR Filter OFF mins, 0 - 59 *
+sensor_crop0 = 0       # 0 = OFF, 1 to 5 dependent on camera *
+auto_mode0   = 0       # 1 = ON, 0 = OFF, this will set the highest sensor mode listed if sensor_crop = 1
+sensor_mode0 = 3       # use 'rpicam-vid --list-cameras' to see available modes for the sensor in use. eg. 3 for HQ camera 4056x2160 10bit
+sw_crop0     = 1920    # sensor crop width (HD = 1920 x 1080, 2k = 2560 x 1440, 4k = 3840 x 2160)
+sh_crop0     = 1080    # sensor crop height
+HDRnight     = 0
 
 # setup for 2nd camera (Pi5 ONLY)
-mode1         = 1       # set camera mode *
-speed1        = 18      # set manual shutter , in shutters list *
-gain1         = 0       # set gain , 0 = AUTO *
-brightness1   = 0       # set camera brightness *
-contrast1     = 7       # set camera contrast *
-awb1          = 0       # auto white balance, 0 = AUTO *
-red1          = 1.5     # red balance *
-blue1         = 1.5     # blue balance *
-meter1        = 0       # metering *
-ev1           = -4      # eV *
-denoise1      = 0       # denoise level *
-quality1      = 90      # video quality *
-sharpness1    = 4       # sharpness *
-saturation1   = 10      # saturation *
-fps1          = 30      # camera fps *
-AF_f_mode1    = 1       # AF camera focus mode *
-AF_f_spot1    = 0       # AF spot mode
-AF_focus1     = 1       # AF camera manual focus default *
-IRF1          = 0       # Waveshare IR Filter switch MODE *
-IRF_on1       = 0       # Waveshare IR Filter switch ON/OFF *
-ir_on_hour1   = 20      # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
-ir_of_hour1   = 7       # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
-ir_on_mins1   = 0       # Switch IR Filter ON mins, 0 - 59 *
-ir_of_mins1   = 0       # Switch IR Filter OFF mins, 0 - 59 *
+mode1        = 1       # set camera mode *
+speed1       = 18      # set manual shutter , in shutters list *
+gain1        = 0       # set gain , 0 = AUTO *
+brightness1  = 0       # set camera brightness *
+contrast1    = 7       # set camera contrast *
+awb1         = 0       # auto white balance, 0 = AUTO *
+red1         = 1.5     # red balance *
+blue1        = 1.5     # blue balance *
+meter1       = 0       # metering *
+ev1          = -4      # eV *
+denoise1     = 0       # denoise level *
+quality1     = 90      # video quality 
+sharpness1   = 4       # sharpness *
+saturation1  = 10      # saturation *
+fps1         = 25      # camera fps *
+AF_f_mode1   = 1       # AF camera focus mode *
+AF_f_spot1   = 0       # AF spot mode *
+AF_focus1    = 1.000   # AF camera manual focus default, in meters *
+IRF1         = 0       # Waveshare IR Filter switch MODE *
+IRF_on1      = 0       # Waveshare IR Filter switch ON/OFF *
+ir_on_hour1  = 20      # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
+ir_of_hour1  = 7       # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
+ir_on_mins1  = 0       # Switch IR Filter ON mins, 0 - 59 *
+ir_of_mins1  = 0       # Switch IR Filter OFF mins, 0 - 59 *
+sensor_crop1 = 0       # 1 = ON, 0 = OFF
+auto_mode1   = 0       # 1 = ON, 0 = OFF, this will set the highest sensor mode listed if sensor_crop = 1
+sensor_mode1 = 0       # use 'rpicam-vid --list-cameras' to see available modes for the sensor in use.
+sw_crop1     = 1456    # sensor crop width
+sh_crop1     = 1088    # sensor crop height
+HDRnight1    = 0
 
 #===========================================================================================
-Capture       = 1       # CAPTURE AT BOOT , 0 = off, 1 = ON *
-preview       = 0       # show detected changed pixels *
-noframe       = 0       # set to 1 for no window frame
-ES            = 1       # trigger external camera, 0 = OFF, 1 = SHORT, 2 = LONG *
-SD_limit      = 90      # max SD card filled in % before copy to USB if available or STOP *
-auto_save     = 1       # set to 1 to automatically copy to SD card
-auto_time     = 10      # time after which auto save actioned, 0 = OFF *
-ram_limit     = 150     # MBytes, copy from RAM to SD card when reached *
-check_time    = 10      # fan sampling time in seconds *
-fan_low       = 65      # fan OFF below this, 25% to 100% pwm above this *
-fan_high      = 78      # fan 100% pwm above this *
-on_hour       = 12      # Switch Camera 1 to 2 Hour, 1 - 23, 0 will NOT SWITCH *
-of_hour       = 14      # Switch Camera 2 to 1 Hour, 1 - 23, 0 will NOT SWITCH *
-on_mins       = 12      # Switch Camera 1 to 2 mins, 0 - 59 *
-of_mins       = 14      # Switch Camera 2 to 1 mins, 0 - 59 *
-m_alpha       = 130     # MASK ALPHA *
-sync_time     = 120     # time sync check time in seconds *
-camera        = 0       # camera in use *
-camera_sw     = 0       # camera switch mode *
-ref_time      = 10      # reference image timer interval in seconds 
-max_vlen      = 120     # MAX video length in seconds (only used by use_ref)
+Capture     = 1       # CAPTURE AT BOOT , 0 = off, 1 = ON *
+preview     = 0       # show detected changed pixels *
+noframe     = 0       # set to 1 for no window frame
+ES          = 1       # trigger external camera, 0 = OFF, 1 = SHORT, 2 = LONG *
+SD_limit    = 90      # max SD card filled in % before copy to USB if available or STOP *
+auto_save   = 1       # set to 1 to automatically copy to SD card
+auto_time   = 10      # time after which auto save actioned, 0 = OFF *
+ram_limit   = 150     # MBytes, copy from RAM to SD card when reached *
+check_time  = 10      # fan sampling time in seconds *
+UTC_timer   = 300     # check UTC offset timer
+fan_low     = 65      # fan OFF below this, 25% to 100% pwm above this *
+fan_high    = 78      # fan 100% pwm above this *
+on_hour     = 0       # Switch Camera 1 to 2 Hour, 1 - 23, 0 will NOT SWITCH *
+of_hour     = 0       # Switch Camera 2 to 1 Hour, 1 - 23, 0 will NOT SWITCH *
+on_mins     = 0       # Switch Camera 1 to 2 mins, 0 - 59 *
+of_mins     = 0       # Switch Camera 2 to 1 mins, 0 - 59 *
+m_alpha     = 130     # MASK ALPHA *
+sync_time   = 120     # time sync check time in seconds *
+camera      = 0       # camera in use *
+camera_sw   = 0       # camera switch mode *
+ref_time    = 10      # reference image timer interval in seconds 
+max_vlen    = 120     # MAX video length in seconds (only used by use_ref)
 
 # * adjustable whilst running
 
 # initialise parameters
-config_file   = "PiVideoconfig045.txt"
-pre_width     = int((scr_width/8)*7)
-pre_height    = scr_height
-old_camera    = camera
-synced        = 0
-show          = 0
-reboot        = 0
-stopped       = 0
-record        = 0
-timer         = 0
-zoom          = 0
-trace         = 0
-lapse_timer       = 0
-col_filterp   = 0
-a             = int(scr_width/3)
-b             = int(scr_height/2)
-fcount        = 0
-dc            = 0
-q             = 0
-txtvids       = []
-restart2      = 0
-res2          = 0
-max_fcount    = 10
-gcount        = 0
-fstep         = 20
-old_foc       = 0
-min_foc       = 15
-rep           = 0
-fps2          = fps
-stop_thread   = False
-pause_thread  = False
-vformat       = 0
-sync_timer    = time.monotonic()
-sw_act        = 1
-menu          = -1
-stop_rec      = 0
-rec_stop      = 0
-stop_rec      = 0
-show_vid      = 1
-old_show_vid  = show_vid
-pref          = pre_frames * 1000
-rgray         = []
-confidence    = 1
-ref_timer     = time.monotonic()
-change_crop   = 1
-con_hlimit    = 0.7
-con_llimit    = 0.0
+config_file  = "PiV2config069.txt"
+pre_width    = int((scr_width/8)*7)
+pre_height   = scr_height
+old_camera   = camera
+synced       = 0
+show         = 0
+reboot       = 0
+stopped      = 0
+record       = 0
+timer        = 0
+zoom         = 0
+trace        = 0
+lapse_timer  = 0
+col_filterp  = 0
+a            = int(scr_width/3)
+b            = int(scr_height/2)
+fcount       = 0
+dc           = 0
+q            = 0
+txtvids      = []
+lver         = ""
+restart2     = 0
+res2         = 0
+max_fcount   = 10
+gcount       = 0
+fstep        = 20
+old_foc      = 0
+min_foc      = 15
+rep          = 0
+fps2         = fps
+stop_thread  = False
+pause_thread = False
+vformat      = 0
+sync_timer   = time.monotonic()
+UTCtimer     = time.monotonic()
+sw_act       = 1
+menu         = -1
+stop_rec     = 0
+rec_stop     = 0
+stop_rec     = 0
+show_vid     = 1
+old_show_vid = show_vid
+pref         = pre_frames * 1000
+rgray        = []
+confidence   = 1
+ref_timer    = time.monotonic()
+change_crop  = 1
+con_hlimit   = 0.7
+con_llimit   = 0.0
+foc_ave      = [0] * 100
+foc_count    = 0
+duration     = 0
+xx           = 0
+yy           = 0
 
-# apply timestamp to videos
-def apply_timestamp(request):
-  global mp4_anno,origin,font,scale,colour,thickness
-  if mp4_anno == 1:
-      timestamp = time.strftime("%Y-%m-%d %X")
-      with MappedArray(request, "main") as m:
-          lst = list(origin)
-          lst[0] += 365
-          lst[1] -= 20
-          end_point = tuple(lst)
-          cv2.rectangle(m.array, origin, end_point, (0,0,0), -1) 
-          cv2.putText(m.array, timestamp, origin, font, scale, colour, thickness)
-      
+if watch == True:
+    import threading
+    from queue import Queue
+    
+# read /boot/firmware/config.txt
+configtxt = []
+with open("/boot/firmware/config.txt", "r") as file:
+    line = file.readline()
+    while line:
+        configtxt.append(line.strip())
+        line = file.readline()
+        
+# switch off GPIO if using Hyperpixel4 
+if "dtoverlay=vc4-kms-dpi-hyperpixel4" in configtxt: 
+    print("Hyperpixel found")
+    use_gpio = 0
+
 # setup directories
 Home_Files  = []
 Home_Files.append(os.getlogin())
 vid_dir = "/home/" + Home_Files[0]+ "/Videos/"
 
-cameras       = ['', 'Pi v1', 'Pi v2', 'Pi v3', 'Pi HQ','Arducam 16MP','Arducam 64MP', 'Pi GS','Arducam Owlsight','imx290','imx500','ov9281']
-camids        = ['','ov5647','imx219','imx708','imx477',      'imx519',      'arduca','imx296',          'ov64a4','imx290','imx500','ov9281']
-max_gains     = [64,     255,      40,      64,      88,            64,            64,      64,                64,      64,      64,      64]
-swidths       = [ 0,    2592,    3280,    4608,    4056,          4656,          9152,    1456,              9248,    1920,    1920,    1280]
-sheights      = [ 0,    1944,    2464,    2592,    3040,          3496,          6944,    1088,              6944,    1080,    1080,     800]
+# data
+ID            = [ 0,       1,       2,       3,       4,             5,             6,       7,                8,       9,      10,      11,      12,]
+cameras       = ['', 'Pi v1', 'Pi v2', 'Pi v3', 'Pi HQ','Arducam 16MP','Arducam 64MP', 'Pi GS','Arducam Owlsight','imx290','imx500','ov9281','imx415']
+camids        = ['','ov5647','imx219','imx708','imx477',      'imx519',      'arduca','imx296',          'ov64a4','imx290','imx500','ov9281','imx415']
+max_gains     = [64,     255,      40,      64,      88,            64,            64,      64,                64,      64,      64,      64,      64]
+swidths       = [ 0,    2592,    3280,    4608,    4056,          4656,          9152,    1456,              9248,    1920,    1920,    1280,    3864]
+sheights      = [ 0,    1944,    2464,    2592,    3040,          3496,          6944,    1088,              6944,    1080,    1080,     800,    2912]
 modes         = ['manual','normal','short','long']
 meters        = ['CentreWeighted','Spot','Matrix']
 awbs          = ['auto','tungsten','fluorescent','indoor','daylight','cloudy','custom']
@@ -277,34 +307,25 @@ IR_filters    = ['Auto','Set Times','OFF','ON']
 camera_sws    = ['Auto','Set Times','ONE','TWO']
 
 #check linux version.
-if os.path.exists ("/run/shm/lv.txt"): 
-    os.remove("/run/shm/lv.txt")
-os.system("cat /etc/os-release >> /run/shm/lv.txt")
-with open("/run/shm/lv.txt", "r") as file:
-        line = file.readline()
-        while line:
-           line = file.readline()
-           if line[0:16] == "VERSION_CODENAME":
-               lver = line
-lvers = lver.split("=")
-lver = lvers[1][0:6]
+lv = os.popen("cat /etc/os-release").read()
+lva = lv.split("\n")
+for w in range(0,len(lva)):
+    if lva[w][0:16] == "VERSION_CODENAME":
+        lvers = lva[w].split("=")
+        lver = lvers[1][0:6]
+print(lver)
 
-#check Pi model.
-Pi = 0
-if os.path.exists ('/run/shm/md.txt'): 
-    os.remove("/run/shm/md.txt")
-os.system("cat /proc/cpuinfo >> /run/shm/md.txt")
-with open("/run/shm/md.txt", "r") as file:
-        line = file.readline()
-        while line:
-           line = file.readline()
-           if line[0:5] == "Model":
-               model = line
+# check pi model
+Pi = -1
+model = os.popen("cat /proc/device-tree/model").read()
 mod = model.split(" ")
-if mod[3] == "Compute":
-    Pi = int(mod[5][0:1])
-elif mod[3] == "5":
-    Pi = 5
+if mod[2] == "Compute":
+    Pi = int(mod[4][0:1])
+elif mod[2] == "Zero":
+    Pi = 0
+else:
+    Pi = int(mod[2])
+print("Pi:",Pi)
 
 # setup gpio if enabled
 if use_gpio == 1:
@@ -326,15 +347,15 @@ if use_gpio == 1:
     # external input triggers
     button_e_trig1 = Button(e_trig1,pull_up=False)
 
-# check Vid_configXX.txt exists, if not then write default values
+# check config_file exists, if not then write default values
 if not os.path.exists(config_file):
     defaults = [h_crop,threshold,fps,mode,speed,gain,brightness,contrast,SD_limit,preview,awb,detection,int(red*10),int(blue*10),
               interval,v_crop,v_length,ev,meter,ES,a,b,sharpness,saturation,denoise,fan_low,fan_high,det_high,quality,
               check_time,sd_hour,vformat,threshold2,col_filter,nr,pre_frames,auto_time,ram_limit,mp4_fps,mp4_anno,SD_F_Act,dspeed,IRF,camera,
               mode1,speed1,gain1,brightness1,contrast1,awb1,int(red1*10),int(blue1*10),meter1,ev1,denoise1,quality1,sharpness1,saturation1,
-              fps1,AF_f_mode1,AF_focus1,AF_f_mode,AF_focus,IRF_on,on_hour,of_hour,on_mins,of_mins,ir_on_hour,ir_of_hour,ir_on_mins,ir_of_mins,
-              camera_sw,AF_f_spot,AF_f_spot1,ir_on_hour1,ir_of_hour1,ir_on_mins1,ir_of_mins1,IRF1,IRF_on1,use_buzz,sd_mode,sd_mins,
-              int((sr_offset * 100) + 1200),int((ss_offset * 100) + 1200),m_alpha,use_ref ]
+              fps1,AF_f_mode1,int(AF_focus1 * 1000),AF_f_mode,int(AF_focus *1000),IRF_on,on_hour,of_hour,on_mins,of_mins,ir_on_hour,ir_of_hour,ir_on_mins,ir_of_mins,
+              camera_sw,AF_f_spot,AF_f_spot1,ir_on_hour1,ir_of_hour1,ir_on_mins1,ir_of_mins1,IRF1,IRF_on1,use_buzz,st_mode,sd_mins,
+              int((sr_offset * 100) + 1200),int((ss_offset * 100) + 1200),m_alpha,use_ref,bitrate,ss_on_hour,ss_on_mins,sensor_crop0,sensor_crop1,HDRnight,HDRnight1]
     with open(config_file, 'w') as f:
         for item in defaults:
             f.write("%s\n" % item)
@@ -408,9 +429,9 @@ sharpness1  = config[56]
 saturation1 = config[57]
 fps1        = config[58]
 AF_f_mode1  = config[59]
-AF_focus1   = config[60]
+AF_focus1   = config[60]/1000
 AF_f_mode   = config[61]
-AF_focus    = config[62]
+AF_focus    = config[62]/1000
 IRF_on      = config[63]
 on_hour     = config[64]
 of_hour     = config[65]
@@ -430,12 +451,21 @@ ir_of_mins1 = config[78]
 IRF1        = config[79]
 IRF_on1     = config[80]
 use_buzz    = config[81]
-sd_mode     = config[82]
+st_mode     = config[82]
 sd_mins     = config[83]
 sr_offset   = (config[84] - 1200)/100
 ss_offset   = (config[85] - 1200)/100
 m_alpha     = config[86]
 use_ref     = config[87]
+bitrate     = config[88]
+ss_on_hour  = config[89]
+ss_on_mins  = config[90]
+sensor_crop0 = config[91] 
+sensor_crop1 = config[92] 
+HDRnight     = config[93]
+HDRnight1    = config[94]
+
+bitrate2    = bitrate * 1000000
 
 if camera_sw == 3:
     camera = 1
@@ -443,7 +473,17 @@ if camera_sw == 3:
 elif camera_sw == 2:
     camera = 0
     old_camera = camera
-
+    
+if st_mode == 1:
+    import ephem #(sudo pip install ephem)
+    you = ephem.Observer()
+    you.lat       = your_lat
+    you.lon       = your_long
+    you.elevation = your_elev
+    ep = 1
+else:
+    ep = 0
+    
 old_sd_mins = sd_mins
 old_sd_hour = sd_hour
 sd_time     = (sd_hour * 60) + sd_mins
@@ -459,32 +499,45 @@ UTC_offset_hr = int(UTC_offset)
 UTC_offset_mn = UTC_offset - UTC_offset_hr
 
 # check current hour
-now = datetime.datetime.now()
+now = datetime.now()
 hour = int(now.strftime("%H"))
 mins = int(now.strftime("%M"))
+
+if camera == 0:
+    sensor_crop = sensor_crop0
+    auto_mode   = auto_mode0
+    sensor_mode = sensor_mode0
+    sw_crop     = sw_crop0
+    sh_crop     = sh_crop0
+else:
+    sensor_crop = sensor_crop1
+    auto_mode   = auto_mode1
+    sensor_mode = sensor_mode1
+    sw_crop     = sw_crop1
+    sh_crop     = sh_crop1
 
 def suntimes():
     global sr_seconds,ss_seconds,now_seconds,ir_on_hour,ir_on_mins,ir_of_hour,ir_of_mins,menu,synced,Pi_Cam
     global on_hour,on_mins,of_hour,of_mins,camera_sw,on_time,of_time,IRF,IRF1,ir_on_time,ir_of_time,ir_on_time1,ir_of_time1
     global ir_on_hour1,ir_on_mins1,ir_of_hour1,ir_of_mins1,ss_of_time,ss_of_hour,ss_of_mins,ss_on_time,ss_on_hour,ss_on_mins
-    global UTC_offset_mn,UTC_offset_hr,sd_mode,sd_hour,sd_mins,sd_time
+    global UTC_offset_mn,UTC_offset_hr,st_mode,sd_hour,sd_mins,sd_time
     global ss_offset_mn,sr_offset_mn,ss_offset_hr,sr_offset_hr,ss_offset,sr_offset,now
     
     sun = ephem.Sun()
     r1 = str(you.next_rising(sun))
-    sunrise = datetime.datetime.strptime(str(r1), '%Y/%m/%d %H:%M:%S')
-    sr_timedelta = sunrise - datetime.datetime(2020, 1, 1)
+    sunrise = datetime.strptime(str(r1), '%Y/%m/%d %H:%M:%S')
+    sr_timedelta = sunrise - datetime(2020, 1, 1)
     sr_seconds = sr_timedelta.total_seconds() + (UTC_offset * 3600)
     s1 = str(you.next_setting(sun))
-    sunset = datetime.datetime.strptime(str(s1), '%Y/%m/%d %H:%M:%S')
-    ss_timedelta = sunset - datetime.datetime(2020, 1, 1)
+    sunset = datetime.strptime(str(s1), '%Y/%m/%d %H:%M:%S')
+    ss_timedelta = sunset - datetime(2020, 1, 1)
     ss_seconds = ss_timedelta.total_seconds() + (UTC_offset * 3600)
     time1 = r1.split(" ")
     time1a = time1[1].split(":")
     time2 = s1.split(" ")
     time2a = time2[1].split(":")
-    now = datetime.datetime.now()
-    a_timedelta = now - datetime.datetime(2020, 1, 1)
+    now = datetime.now()
+    a_timedelta = now - datetime(2020, 1, 1)
     now_seconds = a_timedelta.total_seconds()
     
     # sunrise time
@@ -522,7 +575,7 @@ def suntimes():
     ss_of_time  = (ss_of_hour * 60) + ss_of_mins
     
     # set sunset shutdown times
-    if sd_mode == 1: 
+    if st_mode == 1: 
         ss_offset_hr  = int(ss_offset)
         ss_offset_mn  = ss_offset - ss_offset_hr   
         sd_hour = ss_of_hour + ss_offset_hr
@@ -568,13 +621,13 @@ def suntimes():
         ir_of_time  = (ir_of_hour * 60) + ir_of_mins
         if menu == 2:
           if synced == 1:
-              text(0,1,2,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
+              text(1,2,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
           else:
-              text(0,1,0,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
+              text(1,0,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
           if synced == 1 :
-              text(0,2,2,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
+              text(2,2,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
           else:
-              text(0,2,0,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
+              text(2,0,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
 
     if IRF1 == 0:
         ir_on_hour1 = int(time1a[0]) + int(UTC_offset_hr)
@@ -605,13 +658,13 @@ def suntimes():
         ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
         if menu == 7:
           if synced == 1:
-              text(0,1,2,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
+              text(1,2,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
           else:
-              text(0,1,0,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
+              text(1,0,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
           if synced == 1 :
-              text(0,2,2,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
+              text(2,2,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
           else:
-              text(0,2,0,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
+              text(2,0,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
                 
     if camera_sw == 0:
         on_hour = int(time1a[0]) + int(UTC_offset_hr)
@@ -643,18 +696,20 @@ def suntimes():
         on_time = (on_hour * 60) + on_mins
         of_time = (of_hour * 60) + of_mins
         if menu == 3 and cam2 != "1":
-            text(0,6,1,0,1,"SW 2 to 1 time",14,7)
+            text(6,1,0,1,"SW 2 to 1 time",14,7)
             if synced == 1 and cam2 != "1":
-                text(0,6,2,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
+                text(6,2,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
             else:
-                text(0,6,0,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
-            text(0,7,1,0,1,"SW 1 to 2 time",14,7)
+                text(6,0,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
+            text(7,1,0,1,"SW 1 to 2 time",14,7)
             if synced == 1 and cam2 != "1":
-                text(0,7,2,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
+                text(7,2,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
             else:
-                text(0,7,0,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
-
-suntimes()
+                text(7,0,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
+print(st_mode)               
+if st_mode == 1:
+    suntimes()
+ss_on_time = (ss_on_hour * 60) + ss_on_mins
 
 bw = int(scr_width/8)
 cwidth  = scr_width - bw
@@ -667,6 +722,13 @@ if shutter < 0:
 sspeed = int(shutter * 1000000)
 if (shutter * 1000000) - int(shutter * 1000000) > 0.5:
     sspeed +=1
+    
+shutter1 = shutters[speed1]
+if shutter1 < 0:
+    shutter1 = abs(1/shutter1)
+sspeed1 = int(shutter1 * 1000000)
+if (shutter1 * 1000000) - int(shutter1 * 1000000) > 0.5:
+    sspeed1 +=1
 if use_gpio == 1:
     if IRF == 0:
         led_sw_ir.off()
@@ -683,21 +745,22 @@ if threshold == 0:
 
 def Camera_Version():
   global lores_width,lores_height,vid_width,vid_height,old_vf,bw,Pi_Cam,cam1,cam2,camera,camids,max_gain,max_vf,max_vfs,swidth,sheight
-  global a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,pre_width,scr_width,scr_height,scientif
-  if os.path.exists('rpicams.txt'):
-     os.rename('rpicams.txt', 'oldrpicams.txt')
+  global a,b,h_crop,v_crop,h_crop,v_crop,pre_width,pre_height,vformat,pre_height,cwidth,pre_width,scr_width,scr_height,scientif,smodes
+  global sw_crop,sh_crop,sensor_crop,sensor_mode,auto_mode,vwidths
+  global sensor_crop1,auto_mode1,sensor_mode1,sw_crop1,sh_crop1,sensor_crop0,auto_mode0,sensor_mode0,sw_crop0,sh_crop0
+  
+  # find camera versions
   if lver != "bookwo" and lver != "trixie":
-     os.system("libcamera-vid --list-cameras >> rpicams.txt")
+     cams = os.popen("libcamera-vid --list-cameras").read()
   else:
-     os.system("rpicam-vid --list-cameras >> rpicams.txt")
+     cams = os.popen("rpicam-vid --list-cameras").read()
+  cam = cams.split("\n")
   time.sleep(0.5)
+  
   # read rpicams.txt file
   camstxt = []
-  with open("rpicams.txt", "r") as file:
-    line = file.readline()
-    while line:
-        camstxt.append(line.strip())
-        line = file.readline()
+  for w in range(0,len(cam)):
+      camstxt.append(cam[w].strip())
   cam1     = "0"
   cam2     = "1"
   vwidths  = []
@@ -713,6 +776,7 @@ def Camera_Version():
     if cam1 != "0" and cam2 == "1" and camera == 0:
         forms = camstxt[x].split(" ")
         for q in range(0,len(forms)):
+		   
            if "x" in forms[q] and "/" not in forms[q] and "m" not in forms[q] and "[" not in forms[q]:
               qwidth,qheight = forms[q].split("x")
               vwidths.append(int(qwidth))
@@ -724,9 +788,23 @@ def Camera_Version():
               qwidth,qheight = forms[q].split("x")
               vwidths.append(int(qwidth))
               vheights.append(int(qheight))
-              
+  # find number of sensor modes
+  m, n = len(vwidths), 1
+  mat = []
+  for i in range(m):
+    row = [vwidths[i]]
+    for j in range(n):
+        row.append(vheights[i])
+    mat.append(row)
+  qw = []
+  qh = []
+  qt = []  
+  for q in range(0,len(mat)):
+      if mat[q] not in qt:
+          qt.append(mat[q])
   swidths[0]  = vwidths[-1]
   sheights[0] = vheights[-1]
+  smodes = len(qt)
   
   Pi_Cam = -1
   for x in range(0,len(camids)):
@@ -743,19 +821,61 @@ def Camera_Version():
       b = int(pre_height/2)
   swidth  = swidths[Pi_Cam]
   sheight = sheights[Pi_Cam]
-  # set video size
-  if swidth < 1920:
-      vid_width  = swidth
-      vid_height = sheight
-      # set lores size
-      lores_width  = swidth
-      lores_height = sheight
+  # set sensor crop sizes
+  if camera == 0:
+      if Pi_Cam == 8:
+          sensor_crop0 = 0
+      if sensor_crop0 == 1:
+          sensor_crop,auto_mode,sensor_mode,sw_crop,sh_crop = sensor_crop0,auto_mode0,sensor_mode0,sw_crop0,sh_crop0
+      elif sensor_crop0 == 2:
+          sensor_crop,auto_mode,sensor_mode,sw_crop,sh_crop = sensor_crop0,auto_mode0,sensor_mode0,pre_width,pre_height
+      elif sensor_crop0 == 3 and Pi_Cam == 4:
+          sensor_crop,auto_mode,sensor_mode,sw_crop,sh_crop = sensor_crop0,auto_mode0,sensor_mode0,2560,1440
+      elif sensor_crop0 == 4 and Pi_Cam == 4:
+          sensor_crop,auto_mode,sensor_mode,sw_crop,sh_crop = sensor_crop0,auto_mode0,sensor_mode0,2160,2160
+      elif sensor_crop0 == 5 and Pi_Cam == 4:
+          sensor_crop,auto_mode,sensor_mode,sw_crop,sh_crop = sensor_crop0,auto_mode0,sensor_mode0,3040,3040
+          sensor_mode = 4
+      else:
+          sensor_crop = 0
   else:
-      vid_width  = 1920
-      vid_height = 1080
+      if Pi_Cam == 8:
+          sensor_crop1 = 0
+      if sensor_crop1 == 1:
+          sensor_crop,auto_mode,sensor_mode,sw_crop,sh_crop = sensor_crop1,auto_mode1,sensor_mode1,sw_crop1,sh_crop1
+      elif sensor_crop1 == 2:
+          sensor_crop,auto_mode,sensor_mode,sw_crop,sh_crop = sensor_crop1,auto_mode1,sensor_mode1,pre_width,pre_height
+      elif sensor_crop1 == 3 and Pi_Cam == 4:
+          sensor_crop,auto_mode,sensor_mode,sw_crop,sh_crop = sensor_crop1,auto_mode1,sensor_mode1,2560,1440
+      elif sensor_crop1 == 4 and Pi_Cam == 4:
+          sensor_crop,auto_mode,sensor_mode,sw_crop,sh_crop = sensor_crop1,auto_mode1,sensor_mode1,2160,2160
+      elif sensor_crop1 == 5 and Pi_Cam == 4:
+          sensor_crop,auto_mode,sensor_mode,sw_crop,sh_crop = sensor_crop1,auto_mode1,sensor_mode1,3040,3040
+          sensor_mode = 4
+      else:
+          sensor_crop = 0
+  # set video size
+  if sensor_crop == 0 and swidth > 1920:
+      vid_width    = 1920
+      vid_height   = 1080
       # set lores size
       lores_width  = 1280
-      lores_height = 960
+      lores_height = 720
+  elif sensor_crop == 0 and Pi_Cam != -1:
+      vid_width    = swidths[Pi_Cam]
+      vid_height   = sheights[Pi_Cam]
+      # set lores size
+      lores_width  = swidths[Pi_Cam]
+      lores_height = sheights[Pi_Cam]
+  else:
+      if Pi_Cam != -1 and sw_crop > swidths[Pi_Cam]:
+          sw_crop = swidths[Pi_Cam]
+          sh_crop = sheights[Pi_Cam]
+      vid_width    = sw_crop
+      vid_height   = sh_crop
+      # set lores size
+      lores_width  = sw_crop
+      lores_height = sh_crop
   if Pi_Cam != -1:
       print("Camera:",cameras[Pi_Cam])
   elif cam1 != "0" and camera == 0:
@@ -777,9 +897,14 @@ def Camera_Version():
       pygame.display.quit()
       sys.exit()
   pygame.display.set_caption('PiVideoer2 v:' + str(version) + ' Camera: ' + cameras[Pi_Cam] + ' : ' + str(camera + 1))
+  if camera == 0 and menu == 2:
+	  text(10,3,1,1,str(sensor_crop0) + ": " + str(vid_width) + "x" + str(vid_height),13,7)
+  elif camera == 1 and menu == 7:
+	  text(10,3,1,1,str(sensor_crop1) + ": " + str(vid_width) + "x" + str(vid_height),13,7)
             
 Camera_Version()
-suntimes()
+if st_mode == 1:
+    suntimes()
 
 print(Pi_Cam,cam1,cam2)
 
@@ -795,7 +920,7 @@ bh = int(scr_height/12)
 font_size = int(min(bh, bw)/3)
 start_up = time.monotonic()
 col_timer = 0
-pygame.init()
+
 fxx = 0
 fxy = 0
 fxz = 1
@@ -831,50 +956,60 @@ mask,change = MaskChange()
 
 if os.path.exists('mylist.txt'):
     os.remove('mylist.txt')
+    
+# apply timestamp to videos
+def apply_timestamp(request):
+  global mp4_anno,origin,font,scale,colour,thickness
+  if mp4_anno == 1:
+      timestamp = time.strftime("%Y-%m-%d %X")
+      with MappedArray(request, "main") as m:
+          lst = list(origin)
+          lst[0] += 365
+          lst[1] -= 20
+          end_point = tuple(lst)
+          cv2.rectangle(m.array, origin, end_point, (0,0,0), -1) 
+          cv2.putText(m.array, timestamp, origin, font, scale, colour, thickness)
 
-# determine /dev/v4l-subdevX for Pi v3 and Arducam 16/64MP cameras
-foc_sub3 = -1
-foc_sub5 = -1
-for x in range(0,10):
-    if os.path.exists("ctrls.txt"):
-        os.remove("ctrls.txt")
-    os.system("v4l2-ctl -d /dev/v4l-subdev" + str(x) + " --list-ctrls >> ctrls.txt")
-    time.sleep(0.25)
-    ctrlstxt = []
-    with open("ctrls.txt", "r") as file:
-        line = file.readline()
-        while line:
-            ctrlstxt.append(line.strip())
-            line = file.readline()
-    for j in range(0,len(ctrlstxt)):
-        if ctrlstxt[j][0:51] == "focus_absolute 0x009a090a (int)    : min=0 max=4095":
-            foc_sub5 = x
-        if ctrlstxt[j][0:51] == "focus_absolute 0x009a090a (int)    : min=0 max=1023":
-            foc_sub3 = x
-
+# start circular buffer
 def start_buffer():
-    global lores_width,lores_height,vid_width,vid_height,picam2,encoder,encoding,vlen_time,Pi_Cam,bitrate,circular,pre_frames,camera
-    # start circular buffer
+    global vid_width,vid_height,picam2,encoding,vlen_time,circular,bitrate2,encoder,sensor_mode,smodes,auto_mode,sensor_crop,camera,fps,fps1
+    if auto_mode == 1:
+        sensor_mode = smodes - 1
+        print("Sensor Mode: ",sensor_mode)
+    if sensor_mode > len(vwidths) - 1:
+        sensor_mode = len(vwidths) - 1
+        print("Sensor Mode1: ",sensor_mode)
     lsize = (lores_width,lores_height)
     picam2 = Picamera2(camera)
-    video_config = picam2.create_video_configuration(main={"size": (vid_width, vid_height), "format": "RGB888"},
-                                             lores={"size": lsize, "format": "YUV420"},
-                                             display="lores")
+    if sensor_crop > 0:
+        video_config = picam2.create_video_configuration(main={"size": (vid_width, vid_height), "format": "RGB888"},
+                                             lores={"size": lsize, "format": "YUV420"},display="lores",raw=picam2.sensor_modes[sensor_mode])
+    else:
+        video_config = picam2.create_video_configuration(main={"size": (vid_width, vid_height), "format": "RGB888"},
+                                             lores={"size": lsize, "format": "YUV420"},display="lores")
     picam2.configure(video_config)
-    encoder = H264Encoder(bitrate, repeat=True)
+    encoder = H264Encoder(bitrate2, repeat=True)
     pref = pre_frames * 1000
     circular = CircularOutput2(buffer_duration_ms=pref)
     picam2.pre_callback = apply_timestamp
+    if camera == 0:
+        picam2.set_controls({"FrameRate": fps})
+    else:
+        picam2.set_controls({"FrameRate": fps1})
     picam2.start_recording(encoder, circular)
     encoding = False
     vlen_time = 0
 
 start_buffer()
 
+# setup camera 0 parameters
 def set_parameters():
     global mode,sspeed,picam2,awb,AF_f_mode,AF_focus,brightness,contrast,gain,ev,meter,saturation,sharpness,denoise,fps,use_gpio,IRF,IRF_on,led_sw_ir,led_sw_ir1
-    global a,b,h_crop,v_crop,swidth,sheight,fxx,fxy,fxz,fxa,AF_f_spot
-    # setup camera parameters
+    global a,b,h_crop,v_crop,swidth,sheight,fxx,fxy,fxz,fxa,AF_f_spot,Pi_Cam,vid_width,vid_height,sensor_mode,sw_crop,sh_crop,sensor_crop,HDRnight
+    if sensor_crop > 0:
+        offset = [int((swidths[Pi_Cam]/2) - (vid_width/2)),int((sheights[Pi_Cam]/2) - (vid_height/2))]
+        size   = [vid_width,vid_height ]
+        picam2.set_controls({"ScalerCrop": offset + size})
     if mode == 0:
         picam2.set_controls({"AeEnable": False,"ExposureTime": sspeed})
     else:
@@ -917,7 +1052,6 @@ def set_parameters():
                 fxa = int((v_crop * 2) * (sheight/pre_height))
                 picam2.set_controls({"AfMode" : controls.AfModeEnum.Auto,"AfMetering" : controls.AfMeteringEnum.Windows,"AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
                 picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
-
         elif AF_f_mode == 2:
             if AF_f_spot == 0:
                 picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width*.33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
@@ -948,7 +1082,10 @@ def set_parameters():
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Fast})
     elif denoise == 2:
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
-    picam2.set_controls({"FrameRate": fps})
+    if HDRnight == 1:
+        picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
+    else:
+        picam2.set_controls({"HdrMode": controls.HdrModeEnum.Off})
     if use_gpio == 1:
         if IRF_on == 0 and IRF == 2:
             led_sw_ir.off()
@@ -957,11 +1094,16 @@ def set_parameters():
             led_sw_ir1.on()
             led_sw_ir.on()
 
+# setup camera 1 parameters
 def set_parameters1():
     global mode1,sspeed1,picam2,awb1,AF_f_mode1,AF_focus1,brightness1,contrast1,gain1,ev1,meter1,saturation1,sharpness1,denoise1,fps1,use_gpio,IRF_on,IRF
-    global led_sw_ir,led_sw_ir1,a,b,h_crop,v_crop,swidth,sheight,fxx,fxy,fxz,fxa,AF_f_spot1
-    # setup camera1 parameters
+    global led_sw_ir,led_sw_ir1,a,b,h_crop,v_crop,swidth,sheight,fxx,fxy,fxz,fxa,AF_f_spot1,Pi_Cam,vid_width,vid_height,sensor_mode,swidths,sheights,HDRnight1
     time.sleep(1)
+    if sensor_crop > 0:
+        offset = [int((swidths[Pi_Cam]/2) - (vid_width/2)),int((sheights[Pi_Cam]/2) - (vid_height/2))]
+        size   = [vid_width,vid_height]
+        print(offset,size)
+        picam2.set_controls({"ScalerCrop": offset + size})
     if mode1 == 0:
         picam2.set_controls({"AeEnable": False,"ExposureTime": sspeed1})
     else:
@@ -1014,7 +1156,6 @@ def set_parameters1():
                 fxa = int((v_crop * 2) * (sheight/pre_height))
                 picam2.set_controls({"AfMode" : controls.AfModeEnum.Continuous,"AfMetering" : controls.AfMeteringEnum.Windows,"AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
                 picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
-
     picam2.set_controls({"Brightness": brightness1/10})
     picam2.set_controls({"Contrast": contrast1/10})
     picam2.set_controls({"ExposureValue": ev1/10})
@@ -1034,7 +1175,10 @@ def set_parameters1():
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Fast})
     elif denoise1 == 2:
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
-    picam2.set_controls({"FrameRate": fps1})
+    if HDRnight1 == 1:
+        picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
+    else:
+        picam2.set_controls({"HdrMode": controls.HdrModeEnum.Off})
     if use_gpio == 1:
         if IRF_on == 0 and IRF == 2:
             led_sw_ir.off()
@@ -1043,6 +1187,7 @@ def set_parameters1():
             led_sw_ir1.on()
             led_sw_ir.on()
 
+# setup camera parameters
 if camera == 0:
     set_parameters()
 else:
@@ -1055,6 +1200,7 @@ print(USB_Files)
 if len(USB_Files) > 0:
     usedusb = os.statvfs(m_user + "/" + USB_Files[0] + "/")
     USB_storage = ((1 - (usedusb.f_bavail / usedusb.f_blocks)) * 100)
+    print(m_user + "/'" + USB_Files[0] + "'/Videos/")
     if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
         os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
     if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Pictures/") :
@@ -1074,7 +1220,6 @@ Jpegs.sort()
 frames = len(Videos)
 vf = str(ram_frames) + " - " + str(frames)
 
-
 old_cap = Capture
 restart = 0
 menu    = -1
@@ -1090,9 +1235,23 @@ if "System clock synchronized: yes" in os.popen("timedatectl").read().split("\n"
 else:
     synced = 0
 
+def UTC_offsetter():
+    global UTC_offset
+    # get UTC offset
+    data = os.popen("timedatectl").read().split("\n")
+    l = datetime.strptime(str(data[0])[31:50], "%Y-%m-%d %H:%M:%S")
+    u = datetime.strptime(str(data[1])[31:50], "%Y-%m-%d %H:%M:%S")
+    th = str(l-u)
+    ti = th.split(":")
+    UTC_offset = int(ti[0]) + int(ti[1])/60
+    print("UTC_offset",UTC_offset)
+
+if auto_offset == 1:    
+    UTC_offsetter()
+    
 # setup pygame window
 if noframe == 0:
-   windowSurfaceObj = pygame.display.set_mode((scr_width,scr_height), 0, 24)
+   windowSurfaceObj = pygame.display.set_mode((scr_width,scr_height-10), 1, 24)
 else:
    windowSurfaceObj = pygame.display.set_mode((scr_width,scr_height), pygame.NOFRAME, 24)
 
@@ -1109,20 +1268,22 @@ yellowColor = pygame.Color(255, 255,   0)
 blueColor =   pygame.Color(  0,   0, 255)
 redColor =    pygame.Color(200,   0,   0)
 
-def button(col,row, bColor):
+# draw a button
+def button(row,bColor):
     colors = [greyColor, dgryColor, whiteColor, redColor, greenColor,yellowColor]
     Color = colors[bColor]
-    bx = scr_width - ((1-col) * bw) + 2
+    bx = scr_width - bw + 2
     by = row * bh
     pygame.draw.rect(windowSurfaceObj,Color,Rect(bx+1,by,bw-2,bh))
     pygame.draw.line(windowSurfaceObj,whiteColor,(bx,by),(bx,by+bh-1),2)
     pygame.draw.line(windowSurfaceObj,whiteColor,(bx,by),(bx+bw-1,by),1)
     pygame.draw.line(windowSurfaceObj,dgryColor,(bx,by+bh-1),(bx+bw-1,by+bh-1),1)
     pygame.draw.line(windowSurfaceObj,dgryColor,(bx+bw-2,by),(bx+bw-2,by+bh),2)
-    pygame.display.update(bx, by, bw-1, bh)
+    pygame.display.update() #bx, by, bw-1, bh)
     return
 
-def text(col,row,fColor,top,upd,msg,fsize,bcolor):
+# add button text
+def text(row,fColor,top,upd,msg,fsize,bcolor):
    global font_size, fontObj, bh, bw, cwidth
    if os.path.exists ('/usr/share/fonts/truetype/freefont/FreeSerif.ttf'): 
        fontObj = pygame.font.Font('/usr/share/fonts/truetype/freefont/FreeSerif.ttf', int(fsize))
@@ -1131,7 +1292,7 @@ def text(col,row,fColor,top,upd,msg,fsize,bcolor):
    colors =  [dgryColor, greenColor, yellowColor, redColor, greenColor, blueColor, whiteColor, greyColor, blackColor, purpleColor]
    Color  =  colors[fColor]
    bColor =  colors[bcolor]
-   bx = scr_width - ((1-col) * bw)
+   bx = scr_width - bw
    by = row * bh
    msgSurfaceObj = fontObj.render(msg, False, Color)
    msgRectobj = msgSurfaceObj.get_rect()
@@ -1143,18 +1304,23 @@ def text(col,row,fColor,top,upd,msg,fsize,bcolor):
        msgRectobj.topleft = (bx+int(bw/4), by + int(bh/2))
    windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
    if upd == 1:
-      pygame.display.update(bx, by, bw, bh)
+      pygame.display.update() #bx, by, bw, bh)
 
+# main menu
 def main_menu():
     global ram_frames,frames,menu,sd_hour,pf,vf,synced,Capture,show,zoom,preview,scr_height,cwidth,old_cap,Jpegs
+    pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,0,scr_width-bw,scr_height))
+    pygame.display.update()
     menu = -1
     show = 0
+    xx = 0
+    yy = 0
     preview = 0
     Capture = old_cap
     zoom = 0
     for d in range(0,12):
-         button(0,d,0)
-    button(0,1,3)
+         button(d,0)
+    button(1,3)
     Videos = glob.glob(h_user + '/Videos/*.mp4')
     frames = len(Videos)
     Jpegs = glob.glob(h_user + '/Videos/*.jpg')
@@ -1170,63 +1336,63 @@ def main_menu():
     frames = len(Videos)
     vf = str(ram_frames) + " - " + str(frames)
     if Capture == 0 and menu == -1:
-        button(0,0,0)
-        text(0,0,0,0,1,"CAPTURE",16,7)
+        button(0,0)
+        text(0,0,0,1,"CAPTURE",16,7)
         vf = str(ram_frames) + " - " + str(frames)
-        text(0,0,3,1,1,vf,14,7)
+        text(0,3,1,1,vf,14,7)
     elif menu == -1:
-        button(0,0,4)
-        text(0,0,6,0,1,"CAPTURE",16,4)
+        button(0,4)
+        text(0,6,0,1,"CAPTURE",16,4)
         vf = str(ram_frames) + " - " + str(frames)
-        text(0,0,3,1,1,vf,14,4)
-    text(0,1,6,0,1,"RECORD",16,3)
-    text(0,2,1,0,1,"DETECTION",14,7)
-    text(0,2,1,1,1,"Settings",14,7)
+        text(0,3,1,1,vf,14,4)
+    text(1,6,0,1,"RECORD",16,3)
+    text(2,1,0,1,"DETECTION",14,7)
+    text(2,1,1,1,"Settings",14,7)
     if cam2 != "1":
-        text(0,3,1,0,1,"CAMERA 1",14,7)
+        text(3,1,0,1,"CAMERA 1",14,7)
     else:
-        text(0,3,1,0,1,"CAMERA ",14,7)
-    text(0,3,1,1,1,"Settings 1",14,7)
+        text(3,1,0,1,"CAMERA ",14,7)
+    text(3,1,1,1,"Settings 1",14,7)
     if cam2 != "1":
-        text(0,4,1,0,1,"CAMERA 1",14,7)
+        text(4,1,0,1,"CAMERA 1",14,7)
     else:
-        text(0,4,1,0,1,"CAMERA ",14,7)
-    text(0,4,1,1,1,"Settings 2",14,7)
+        text(4,1,0,1,"CAMERA ",14,7)
+    text(4,1,1,1,"Settings 2",14,7)
     if Pi == 5 and cam2 != "1":
-        text(0,5,1,0,1,"VIDEO & SW",14,7)
+        text(5,1,0,1,"VIDEO & SW",14,7)
     else:
-        text(0,5,1,0,1,"VIDEO     ",14,7)
-    text(0,5,1,1,1,"Settings",14,7)
-    text(0,7,1,0,1,"OTHER",14,7)
-    text(0,7,1,1,1,"Settings ",14,7)
+        text(5,1,0,1,"VIDEO     ",14,7)
+    text(5,1,1,1,"Settings",14,7)
+    text(7,1,0,1,"OTHER",14,7)
+    text(7,1,1,1,"Settings ",14,7)
     if ((ram_frames > 0 or frames > 0) and menu == -1):
-        text(0,6,1,0,1,"SHOW or",13,7)
-        text(0,6,1,1,1,"DELETE",13,7)
+        text(6,1,0,1,"SHOW or",13,7)
+        text(6,1,1,1,"DELETE",13,7)
     else:
-        text(0,6,0,0,1,"SHOW or",13,7)
-        text(0,6,0,1,1,"DELETE",13,7)
+        text(6,0,0,1,"SHOW or",13,7)
+        text(6,0,1,1,"DELETE",13,7)
     if Pi == 5 and cam2 != "1":
-        text(0,8,1,0,1,"CAMERA 2",14,7)
-        text(0,8,1,1,1,"Settings 1",14,7)
-        text(0,9,1,0,1,"CAMERA 2",14,7)
-        text(0,9,1,1,1,"Settings 2",14,7)
+        text(8,1,0,1,"CAMERA 2",14,7)
+        text(8,1,1,1,"Settings 1",14,7)
+        text(9,1,0,1,"CAMERA 2",14,7)
+        text(9,1,1,1,"Settings 2",14,7)
     if zoom == 0:
-        button(0,10,0)
-        text(0,10,2,0,1,"Zoom",14,7)
+        button(10,0)
+        text(10,2,0,1,"Zoom",14,7)
     else:
-        button(0,10,1)
-        text(0,10,1,0,1,"Zoom",14,0)
-        text(0,10,1,1,1,str(zoom),14,0)
-    text(0,11,3,0,1,"EXIT",16,7)
+        button(10,1)
+        text(10,1,0,1,"Zoom",14,0)
+        text(10,1,1,1,str(zoom),14,0)
+    text(11,3,0,1,"EXIT",16,7)
     st = os.statvfs("/run/shm/")
     freeram = (st.f_bavail * st.f_frsize)/1100000
     free = (os.statvfs('/'))
     SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
     ss = str(int(freeram)) + "MB - " + str(int(SD_storage)) + "%"
     if record == 0:
-        text(0,1,6,1,1,ss,12,3)
+        text(1,6,1,1,ss,12,3)
     else:
-         text(0,1,6,1,1,ss,12,0)
+         text(1,6,1,1,ss,12,0)
 
 # clear ram of videos and pictures
 Rpegs = glob.glob('/run/shm/*.jpg')
@@ -1266,7 +1432,7 @@ def watchdog(qq):
         else:
            timeval = qq.get()
         if timeval < time.monotonic() - 120 and pause_thread == False:
-            now = datetime.datetime.now()
+            now = datetime.now()
             timestamp = now.strftime("%y%m%d%H%M%S")
             with open("Watchdog.txt", 'a') as f:
                f.write(timestamp + "\n")
@@ -1282,11 +1448,13 @@ watch_time  = 10
 menu_timer  = time.monotonic()
 menu_time   = 30
 
+
+# MAIN LOOP
 while True:
     time.sleep(1/dspeed)
     # read Pi5 temperature and fan speed
     if Pi == 5 and menu == 5:
-        text(0,0,2,0,1,"CPU Temp/FAN",13,7)
+        text(0,2,0,1,"CPU Temp/FAN",13,7)
         if os.path.exists ('fantxt.txt'): 
             os.remove("fantxt.txt")
         os.system("cat /sys/devices/platform/cooling_fan/hwmon/*/fan1_input >> fantxt.txt")
@@ -1295,11 +1463,11 @@ while True:
             line = file.readline()
             if line == "":
                 line = 0
-            text(0,0,1,1,1,str(int(temp)) + " / " + str(int(line)),14,7)
+            text(0,1,1,1,str(int(temp)) + " / " + str(int(line)),14,7)
     # read non Pi5 temperature
     elif menu == 5:
-        text(0,0,2,0,1,"CPU Temp",14,7)
-        text(0,0,1,1,1,str(int(temp)),14,7)
+        text(0,2,0,1,"CPU Temp",14,7)
+        text(0,1,1,1,str(int(temp)),14,7)
     # watchdog
     if time.monotonic() - watch_timer > watch_time and watch == True:
         qq.put(time.monotonic())
@@ -1320,7 +1488,8 @@ while True:
             else:
                 set_parameters()
         main_menu()
-    # time sync 
+        
+    # check time sync 
     if time.monotonic() - sync_timer > sync_time and not encoding and menu == -1:
         sync_timer = time.monotonic()
         if trace > 0:
@@ -1332,26 +1501,38 @@ while True:
             else:
                 synced = 0
             if synced == 1 and menu == 5:
-                text(0,9,3,1,1,str(sd_hour) + ":00",14,7)
+                text(9,3,1,1,str(sd_hour) + ":00",14,7)
             elif menu == 5:
-                text(0,9,0,1,1,str(sd_hour)+":00",14,7)
+                text(9,0,1,1,str(sd_hour)+":00",14,7)
             if trace > 0:
                 print("SYNC: ", synced)
         except:
             pass
-          
+    
+    # check UTC offset
+    if time.monotonic() - UTCtimer > UTC_timer and not encoding:
+        UTCtimer = time.monotonic()
+        # check if clock synchronised
+        if "System clock synchronized: yes" in os.popen("timedatectl").read().split("\n"):
+            synced = 1
+        else:
+            synced = 0
+        if auto_offset == 1: 
+            UTC_offsetter()
+            suntimes()
+                        
     # check timer
     if time.monotonic() - check_timer > check_time and not encoding:
         check_timer = time.monotonic()
         if trace > 0:
               print ("Step CHECK TIME")
         # check current hour
-        now = datetime.datetime.now()
+        now = datetime.now()
         hour = int(now.strftime("%H"))
         mins = int(now.strftime("%M"))
 
         # get sunrise and sunset times
-        if menu == -1:
+        if menu == -1 and st_mode == 1:
             suntimes()
         
         # switch cameras if switch time reached and clocked synced
@@ -1359,13 +1540,15 @@ while True:
           if synced == 1 and on_time < of_time and menu != 1 and menu != 2 and menu != 6 and menu != 7:
               if (((hour* 60) + mins >= on_time and (hour* 60) + mins < of_time) and camera == 1) or (camera == 1 and old_camera == 0):
                     camera = 0
-                    if IRF_on == 1 and IRF_on1 == 1:
+                    if IRF_on == 1 and IRF_on1 == 1 and use_gpio == 1:
                         led_ir_light.off()
                     old_camera = camera
                     if menu == 3:
-                        text(0,5,1,0,1,"Camera: " + str(camera + 1),14,7)
-                        text(0,5,3,1,1,str(camera_sws[camera_sw]),14,7)
+                        text(5,1,0,1,"Camera: " + str(camera + 1),14,7)
+                        text(5,3,1,1,str(camera_sws[camera_sw]),14,7)
                     picam2.stop_recording()
+                    pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,0,scr_width-bw,scr_height))
+                    pygame.display.update()
                     circular = CircularOutput2(buffer_duration_ms=pref)
                     picam2.close()
                     picam2.stop()
@@ -1378,12 +1561,15 @@ while True:
                         set_parameters1()
               elif (((hour* 60) + mins >= of_time or (hour* 60) + mins < on_time) and camera == 0)  or (camera == 0 and old_camera == 1):
                     camera = 1
-                    led_ir_light.on()
+                    if use_gpio == 1:
+                        led_ir_light.on()
                     old_camera = camera
                     if menu == 3:
-                        text(0,5,1,0,1,"Camera: " + str(camera + 1),14,7)
-                        text(0,5,3,1,1,str(camera_sws[camera_sw]),14,7)
+                        text(5,1,0,1,"Camera: " + str(camera + 1),14,7)
+                        text(5,3,1,1,str(camera_sws[camera_sw]),14,7)
                     picam2.stop_recording()
+                    pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,0,scr_width-bw,scr_height))
+                    pygame.display.update()
                     circular = CircularOutput2(buffer_duration_ms=pref)
                     picam2.close()
                     picam2.stop()
@@ -1403,29 +1589,32 @@ while True:
                     # daytime switch IR filter ON and light OFF
                     IRF_on = 1
                     stop_rec = 0
-                    led_sw_ir.on()
-                    led_sw_ir1.off()
-                    led_ir_light.off()
+                    if use_gpio == 1:
+                        led_sw_ir.on()
+                        led_sw_ir1.off()
+                        led_ir_light.off()
                     if menu == 2 :
-                        text(0,0,1,0,1,"IR Filter (ON)",14,7)
+                        text(0,1,0,1,"IR Filter (ON)",14,7)
                  
                 elif ((hour* 60) + mins >= ir_of_time or (hour* 60) + mins < ir_on_time):
                     if rec_stop == 1: # night time, stop recording, all IR Filters and Light OFF
-                        now = datetime.datetime.now()
+                        now = datetime.now()
                         timestamp = now.strftime("%y%m%d%H%M%S")
                         IRF_on = 0
-                        led_sw_ir.off()
-                        led_ir_light.off()
+                        if use_gpio == 1:
+                            led_sw_ir.off()
+                            led_ir_light.off()
                         stop_rec = 1
                         if menu == 2 :
-                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
+                            text(0,2,0,1,"IR Filter (OFF)",14,7)
                     else: # night time switch IR filters OFF and light ON
                         IRF_on = 0
                         stop_rec = 0
-                        led_sw_ir.off()
-                        led_ir_light.on()
+                        if use_gpio == 1:
+                            led_sw_ir.off()
+                            led_ir_light.on()
                         if menu == 2 :
-                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
+                            text(0,2,0,1,"IR Filter (OFF)",14,7)
 
         # switch IR filter1 / Light / RECORD if switch time reached and clocked synced
         if IRF1 <= 1 and camera == 1: # AUTO (Sun) or SET TIMES - switch IR filter / Light / RECORD at set times
@@ -1434,28 +1623,31 @@ while True:
                     # daytime switch IR filter ON and light OFF
                     IRF_on1 = 1
                     stop_rec = 0
-                    led_sw_ir1.on()
-                    led_sw_ir.off()
-                    led_ir_light.off()
+                    if use_gpio == 1:
+                        led_sw_ir1.on()
+                        led_sw_ir.off()
+                        led_ir_light.off()
                     if menu == 7:
-                        text(0,0,1,0,1,"IR Filter (ON)",14,7)
+                        text(0,1,0,1,"IR Filter (ON)",14,7)
                 elif ((hour* 60) + mins >= ir_of_time1 or (hour* 60) + mins < ir_on_time1):
                     if rec_stop == 1: # night time, stop recording, all IR Filters and Light OFF
-                        now = datetime.datetime.now()
+                        now = datetime.now()
                         timestamp = now.strftime("%y%m%d%H%M%S")
                         IRF_on1 = 0
-                        led_sw_ir1.off()
-                        led_ir_light.off()
+                        if use_gpio == 1:
+                            led_sw_ir1.off()
+                            led_ir_light.off()
                         stop_rec = 1
                         if menu == 7:
-                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
+                            text(0,2,0,1,"IR Filter (OFF)",14,7)
                     else: # night time switch IR filters OFF and light ON
                         IRF_on1 = 0
                         stop_rec = 0
-                        led_sw_ir1.off()
-                        led_ir_light.on()
+                        if use_gpio == 1:
+                            led_sw_ir1.off()
+                            led_ir_light.on()
                         if menu == 7:
-                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
+                            text(0,2,0,1,"IR Filter (OFF)",14,7)
                             
           
         # shutdown if shutdown time reached and clocked synced
@@ -1467,18 +1659,18 @@ while True:
             # move any videos to SD Card
             if ram_frames > 0:
                 if menu == -1 :
-                    button(0,0,1)
-                    text(0,0,5,0,1,"CAPTURE",16,0)
+                    button(0,1)
+                    text(0,5,0,1,"CAPTURE",16,0)
                     vf = str(ram_frames) + " - " + str(frames)
-                    text(0,0,3,1,1,vf,14,4)
+                    text(0,3,1,1,vf,14,4)
                 Rideos = glob.glob('/run/shm/*.mp4')
                 Rideos.sort()
-                for xx in range(0,len(Rideos)):
-                    shutil.copy(Rideos[xx], h_user + '/Videos/')
+                for xxx in range(0,len(Rideos)):
+                    shutil.copy(Rideos[xxx], h_user + '/Videos/')
                 Rpegs = glob.glob('/run/shm/*.jpg')
                 Rpegs.sort()
-                for xx in range(0,len(Rpegs)):
-                    shutil.copy(Rpegs[xx], h_user + '/Videos/')
+                for xxx in range(0,len(Rpegs)):
+                    shutil.copy(Rpegs[xxx], h_user + '/Videos/')
             # move mp4s to USB if present
             USB_Files  = []
             USB_Files  = (os.listdir(m_user))
@@ -1488,20 +1680,21 @@ while True:
             if len(USB_Files) > 0 and USB_storage < 90:
                 Videos = glob.glob(h_user + '/Videos/*.mp4')
                 Videos.sort()
-                for xx in range(0,len(Videos)):
-                    movi = Videos[xx].split("/")
-                    if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/" + movi[4]):
-                        shutil.move(Videos[xx],m_user[0] + "/'" + USB_Files[0] + "'/")
+                for xxx in range(0,len(Videos)):
+                    movi = Videos[xxx].split("/")
+                    if not os.path.exists(m_user + USB_Files[0] + "/" + movi[4]):
+                        shutil.move(Videos[xxx],m_user[0] + USB_Files[0] + "/")
             if use_gpio == 1 and fan_ctrl == 1:
                 led_fan.value = 0
             stop_thread = True
-            led_sw_ir.off()
-            led_sw_ir1.off()
-            led_ir_light.off()
+            if use_gpio == 1:
+                led_sw_ir.off()
+                led_sw_ir1.off()
+                led_ir_light.off()
             pygame.quit()
-            #print("exit")
+            print("Shutting Down....")
             time.sleep(5)
-            os.system("sudo shutdown -h now")
+            os.system("shutdown -h now")
 
         # set fan speed
         if fan_ctrl == 1 and not encoding:
@@ -1514,11 +1707,11 @@ while True:
             if temp > fan_low and use_gpio == 1:
                 led_fan.value = dc
                 if menu == 5:
-                    text(0,7,1,0,1,"Fan High  " + str(int(dc*100)) + "%",14,7)
+                    text(7,1,0,1,"Fan High  " + str(int(dc*100)) + "%",14,7)
             elif temp < fan_low and use_gpio == 1:
                 led_fan.value = 0
                 if menu == 5: 
-                    text(0,7,2,0,1,"Fan High degC",14,7)
+                    text(7,2,0,1,"Fan High degC",14,7)
                 
         # get RAM free space
         st = os.statvfs("/run/shm/")
@@ -1528,8 +1721,12 @@ while True:
     # GET AN IMAGE
     cur = picam2.capture_array("lores")
     img = cv2.cvtColor(cur,cv2.COLOR_YUV420p2BGR)
+    img = img[0:lores_height,0:lores_width]
     image = pygame.surfarray.make_surface(img)
-    image = pygame.transform.scale(image,(pre_height,pre_width))
+    if sw_crop != sh_crop:
+        image = pygame.transform.scale(image,(pre_height,pre_width))
+    else:
+        image = pygame.transform.scale(image,(pre_height,pre_height))
     image = pygame.transform.rotate(image,int(90))
     image = pygame.transform.flip(image,0,1)
 
@@ -1550,14 +1747,22 @@ while True:
           if use_ref == 1 and os.path.exists("/run/shm/ref.bmp"):
               # read reference image
               new_timer = time.monotonic()
-              if new_timer - ref_timer < pre_frames/2:
+              if (new_timer - ref_timer) < ref_time/2:
                   ref = cv2.imread("/run/shm/oref.bmp", cv2.IMREAD_COLOR)
               else:
                   ref = cv2.imread("/run/shm/ref.bmp", cv2.IMREAD_COLOR)
           if zoom > 0:
-              za = int((pre_width/2)  * (1 - (zoom/10)))
-              zb = int((pre_height/2) * (1 - (zoom/10)))
-              z_crop = image2[int(pre_width/2)-za:int(pre_width/2)+za,int(pre_height/2)-zb:int(pre_height/2)+zb]
+              if sw_crop != sh_crop:
+                  za = int((pre_width/2)  * (1 - (zoom/10)))
+                  zb = int((pre_height/2) * (1 - (zoom/10)))
+                  z_crop = image2[xx + int(pre_width/2)-za:xx + int(pre_width/2)+za,yy + int(pre_height/2)-zb:yy + int(pre_height/2)+zb]
+              else:
+                  za = int((pre_height/2)  * (1 - (zoom/10)))
+                  zb = int((pre_height/2) * (1 - (zoom/10)))
+                  z_crop = image2[xx + int(pre_height/2)-za:xx + int(pre_height/2)+za,yy + int(pre_height/2)-zb:yy + int(pre_height/2)+zb]
+              if z_crop.shape[0] == 0 or z_crop.shape[1] == 0 or xx + (int(pre_width/2)-za) < 0 or xx + (int(pre_width/2)+za) > pre_width or yy + (int(pre_height/2)-zb) < 0 or yy + (int(pre_height/2)+zb) > pre_height:
+                  xx = 0 
+                  yy = 0 
           if trace > 1:
             print ("CROP ", crop.size)
           # COLOUR FILTER for crop
@@ -1589,9 +1794,14 @@ while True:
             # SHOW FOCUS VALUE
             if menu == 0 or menu == 5 or menu == 2 or menu == 7 or menu == 1 or menu == 6:
                 foc = cv2.Laplacian(gray, cv2.CV_64F).var()
+                foc_ave[foc_count] = foc
+                foc_count +=1
+                if foc_count > 9:
+                    foc_count = 0
+                ave_foc = sum(foc_ave)/100	
                 if menu == 2 or menu == 7: 
-                    text(0,3,3,1,1,str(int(foc)),14,7)
-                    text(0,3,2,0,1,"Focus Value",14,7)
+                    text(3,3,1,1,str(int(ave_foc)),14,7)
+                    text(3,2,0,1,"Focus Value",14,7)
             diff = np.sum(mask)
             diff = max(diff,1)
             # COMPARE NEW IMAGE WITH OLD IMAGE
@@ -1635,12 +1845,12 @@ while True:
                         qt[qt > -2] = 0 
                     qt[qt < 0] = -1
                     ar5 = ar5 + qt
-                sar5 = np.sum(ar5)
+            sar5 = np.sum(ar5)
             
             if menu == 0:
-                text(0,1,2,0,1,"Low Detect " + str(int((sar5/diff) * 100)) + "%",14,7)
+                text(1,2,0,1,"Low Detect " + str(int((sar5/diff) * 100)) + "%",14,7)
             if menu == -1 and preview == 1:
-                text(0,2,2,1,1,str(int((sar5/diff) * 100)) + "%",14,7)
+                text(2,2,1,1,str(int((sar5/diff) * 100)) + "%",14,7)
             # MAKE PREVIEW OF DETECTED PIXELS
             if preview == 1:
                 imagep = pygame.surfarray.make_surface(ar5 * 201)
@@ -1653,37 +1863,37 @@ while True:
                 if trace > 0:
                     print ("Step 4 AUTO SAVE")
                 if menu == -1:
-                    text(0,0,5,0,1,"CAPTURE",16,0)
+                    text(0,5,0,1,"CAPTURE",16,0)
                 # read list of existing RAM Video Files
                 Videos = glob.glob('/run/shm/*.mp4')
                 Videos.sort()
                 frames +=len(Videos)
-                for xx in range(0,len(Videos)):
-                    shutil.move(Videos[xx], h_user + '/Videos/')
+                for xxx in range(0,len(Videos)):
+                    shutil.move(Videos[xxx], h_user + '/Videos/')
                 ram_frames = 0
                 # read list of existing RAM Photo Files
                 Jpegs = glob.glob('/run/shm/*.jpg')
                 Jpegs.sort()
-                for xx in range(0,len(Jpegs)):
-                    shutil.move(Jpegs[xx], h_user + '/Videos/')
+                for xxx in range(0,len(Jpegs)):
+                    shutil.move(Jpegs[xxx], h_user + '/Videos/')
                 vf = str(ram_frames) + " - " + str(frames)
                 if menu == -1 :
-                    text(0,0,3,1,1,vf,14,7)
+                    text(0,3,1,1,vf,14,7)
                 if Capture == 0 and menu == -1:
-                    button(0,0,0)
-                    text(0,0,0,0,1,"CAPTURE",16,7)
+                    button(0,0)
+                    text(0,0,0,1,"CAPTURE",16,7)
                     vf = str(ram_frames) + " - " + str(frames)
-                    text(0,0,3,1,1,vf,14,7)
+                    text(0,3,1,1,vf,14,7)
                 elif menu == -1 and frames + ram_frames == 0:
-                    button(0,0,4)
-                    text(0,0,6,0,1,"CAPTURE",16,4)
+                    button(0,4)
+                    text(0,6,0,1,"CAPTURE",16,4)
                     vf = str(ram_frames) + " - " + str(frames)
-                    text(0,0,3,1,1,vf,14,4)
+                    text(0,3,1,1,vf,14,4)
                 elif menu == -1 :
-                    button(0,0,5)
-                    text(0,0,3,0,1,"CAPTURE",16,2)
+                    button(0,5)
+                    text(0,3,0,1,"CAPTURE",16,2)
                     vf = str(ram_frames) + " - " + str(frames)
-                    text(0,0,3,1,1,vf,14,2)
+                    text(0,3,1,1,vf,14,2)
                 last = time.monotonic()
                 Videos = glob.glob(h_user + '/Videos/*.mp4')
                 Videos.sort()
@@ -1698,9 +1908,9 @@ while True:
                 ss = str(int(freeram)) + "MB - " + str(int(SD_storage)) + "%"
                 if menu == -1:
                     if record == 0:
-                        text(0,1,6,1,1,ss,12,3)
+                        text(1,6,1,1,ss,12,3)
                     else:
-                        text(0,1,6,1,1,ss,12,0)
+                        text(1,6,1,1,ss,12,0)
               except:
                   pass
 
@@ -1714,7 +1924,7 @@ while True:
                 if use_ref == 1 and os.path.exists("/run/shm/ref.bmp") and confidence < con_hlimit and confidence >= con_llimit :
                     record = 1
                     if menu == -1:
-                        text(0,0,2,0,1,"Recording",18,1)
+                        text(0,2,0,1,"Recording",18,1)
                 else:
                     record = 0
                         
@@ -1730,18 +1940,18 @@ while True:
             if encoding and menu == -1:
                 mn = int((time.monotonic() - ttime)/60)
                 sc = int((time.monotonic() - ttime) - (mn * 60))
-                text(0,0,2,1,1,("0" + str(mn))[-2:] + ":" + ("0" + str(sc))[-2:],15,0)
+                text(0,2,1,1,("0" + str(mn))[-2:] + ":" + ("0" + str(sc))[-2:],15,0)
                     
             # detection of motion
             if (((sar5/diff) * 100 > detection and (sar5/diff) * 100 < det_high and threshold != 0) or (time.monotonic() - lapse_timer > interval and lapse_timer != 0 and threshold == 0) or record == 1) and menu == -1:
                 if trace > 0:
                     print ("Step 6 DETECTED " + str(int((sar5/diff) * 100)))
                 if menu == 0:
-                    text(0,1,1,0,1,"Low Detect "  + str(int((sar5/diff) * 100)) + "%",14,7)
+                    text(1,1,0,1,"Low Detect "  + str(int((sar5/diff) * 100)) + "%",14,7)
                 if (Capture == 1 and on_sunrise == 0) or (Capture == 1 and on_sunrise == 1 and (hour* 60) + mins >= ss_on_time) or record == 1 :
                     # start recording
                     if not encoding:
-                        now = datetime.datetime.now()
+                        now = datetime.now()
                         timestamp = now.strftime("%y%m%d%H%M%S")
                         circular.open_output(PyavOutput("/run/shm/" + timestamp +".mp4"))
                         encoding = True
@@ -1750,6 +1960,13 @@ while True:
                         print("New Motion", timestamp)
                         ttime = time.monotonic()
                         image3 = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
+                        if sw_crop == sh_crop:
+                            image4 = cv2.cvtColor(image3,cv2.COLOR_BGR2RGB)
+                            image4 = pygame.surfarray.make_surface(image4)
+                            image4 = pygame.transform.rotate(image4,int(90))
+                            image4 = pygame.transform.flip(image4,0,1)
+                            image4 = pygame.transform.scale(image4,(pre_width - pre_height,pre_width - pre_height))
+                            windowSurfaceObj.blit(image4,(pre_height,0))
                         # sound buzzer
                         if use_gpio == 1 and use_buzz == 1:
                             buzzer.value = 0.01
@@ -1770,18 +1987,17 @@ while True:
                             led_s_focus.off()
                     vid = 1
                     if menu == -1:
-                        button(0,0,1)
-                        text(0,0,2,0,1,"Recording",18,3)
+                        button(0,1)
+                        text(0,2,0,1,"Recording",18,3)
                     fx = 1
                     st = os.statvfs("/run/shm/")
                     if use_gpio == 1:
                         buzzer.value = 0 
                   
-                else:
-                    if Capture == 1 and menu == -1:
-                        text(0,0,3,1,1,str(interval - (int(time.monotonic() - lapse_timer))),15,0)
+                elif Capture == 1 and menu == -1 and encoding:
+                    text(0,3,1,1,str(interval - (int(time.monotonic() - lapse_timer))),15,0)
                 if menu == 0:
-                    text(0,1,2,0,1,"Low Detect " + str(int((sar5/diff) * 100)) + "%",14,7)
+                    text(1,2,0,1,"Low Detect " + str(int((sar5/diff) * 100)) + "%",14,7)
             # stop recording
             if (encoding and time.monotonic() - vlen_time > (v_length/1000) + pre_frames) or (encoding and time.monotonic() - ttime > max_vlen and record == 1) or stop_rec == 1:
                 circular.close_output()
@@ -1801,7 +2017,7 @@ while True:
                 Videos.sort()
                 vf = str(ram_frames) + " - " + str(frames)
                 if menu == -1:
-                    text(0,0,3,1,1,vf,14,7)
+                    text(0,3,1,1,vf,14,7)
                 cv2.imwrite("/run/shm/" + str(timestamp) + ".jpg",image3)
                 last = time.monotonic()    
                 st = os.statvfs("/run/shm/")
@@ -1819,20 +2035,22 @@ while True:
                     if trace > 0:
                         print ("Step 10 COPY TO SD")
                     if menu == -1:
-                        text(0,0,5,0,1,"CAPTURE",16,0)
-                        text(0,0,5,1,1," ",15,0)
+                        text(0,5,0,1,"CAPTURE",16,0)
+                        text(0,5,1,1," ",15,0)
                     Videos = glob.glob('/run/shm/*.mp4')
                     Videos.sort()
                     # move Video RAM Files to SD card
-                    for xx in range(0,len(Videos)):
-                        if not os.path.exists(h_user + "/" + '/Videos/' + Videos[xx]):
-                            shutil.move(Videos[xx], h_user + '/Videos/')
+                    for xxx in range(0,len(Videos)):
+                        print(h_user + '/Videos/' + Videos[xxx])
+                        if not os.path.exists(h_user + '/Videos/' + Videos[xxx]):
+                            shutil.move(Videos[xxx], h_user + '/Videos/')
                     Rpegs = glob.glob('/run/shm/*.jpg')
                     Rpegs.sort()
                     # move Photos RAM Files to SD card
-                    for xx in range(0,len(Jpegs)):
-                        if not os.path.exists(h_user + "/" + '/Videos/' + Jpegs[xx]):
-                            shutil.move(Jpegs[xx], h_user + '/Videos/')
+                    for xxx in range(0,len(Jpegs)):
+                        print(h_user + '/Videos/' + Jpegs[xxx])
+                        if not os.path.exists(h_user + '/Videos/' + Jpegs[xxx]):
+                            shutil.move(Jpegs[xxx], h_user + '/Videos/')
                     # read list of existing RAM Video Files
                     Rideos = glob.glob('/run/shm/*.mp4')
                     Rideos.sort()
@@ -1846,9 +2064,9 @@ while True:
                     vf = str(ram_frames) + " - " + str(frames)
                     if menu == 4:
                         if ram_frames + frames > 0:
-                            text(0,4,3,1,1,str(ram_frames + frames),14,7)
+                            text(4,3,1,1,str(ram_frames + frames),14,7)
                         else:
-                            text(0,4,3,1,1," ",14,7)
+                            text(4,3,1,1," ",14,7)
                 # check free RAM and SD storage space
                 st = os.statvfs("/run/shm/")
                 freeram = (st.f_bavail * st.f_frsize)/1100000
@@ -1856,16 +2074,15 @@ while True:
                 SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
                 ss = str(int(freeram)) + "MB - " + str(int(SD_storage)) + "%"
                 if menu == -1:
-                    text(0,0,3,1,1,vf,14,0)
-                #lapse_timer = time.monotonic()
+                    text(0,3,1,1,vf,14,0)
                 oldimg = []
                 vidjr = 1
                 if ((ram_frames > 0 or frames > 0)  and menu == -1):
-                    text(0,6,1,0,1,"SHOW,EDIT or",13,7)
-                    text(0,6,1,1,1,"DELETE",14,7)
+                    text(6,1,0,1,"SHOW,EDIT or",13,7)
+                    text(6,1,1,1,"DELETE",14,7)
                 elif menu == -1:
-                    text(0,6,0,0,1,"SHOW,EDIT or",13,7)
-                    text(0,6,0,1,1,"DELETE",14,7)
+                    text(6,0,0,1,"SHOW,EDIT or",13,7)
+                    text(6,0,1,1,"DELETE",14,7)
                 USB_Files  = []
                 USB_Files  = (os.listdir(m_user))
                 if len(USB_Files) > 0:
@@ -1875,9 +2092,9 @@ while True:
                 if SD_storage > SD_limit and len(USB_Files) > 0 and SD_F_Act == 2 and USB_storage < 90:
                     if trace > 0:
                         print ("Step 12 USED SD CARD > LIMIT")
-                    if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
-                        os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
-                    text(0,0,2,0,1,"CAPTURE",16,0)
+                    if not os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/") :
+                        os.system('mkdir ' + m_user + "/" + USB_Files[0] + "/Videos/")
+                    text(0,2,0,1,"CAPTURE",16,0)
                     while SD_storage > SD_limit:
                         Jpegs = glob.glob(h_user + '/Videos/*.jpg')
                         Jpegs.sort()
@@ -1895,11 +2112,11 @@ while True:
                         SD_storage = ((1 - (free.f_bavail / free.f_blocks)) * 100)
                         ss = str(int(freeram)) + "MB - " + str(int(SD_storage)) + "%"
                         if record == 0:
-                            text(0,1,6,1,1,ss,12,3)
+                            text(1,6,1,1,ss,12,3)
                         else:
-                            text(0,1,6,1,1,ss,12,0)
+                            text(1,6,1,1,ss,12,0)
                         
-                    text(0,0,6,0,1,"CAPTURE",16,0)
+                    text(0,6,0,1,"CAPTURE",16,0)
                 elif SD_storage > SD_limit:
                     #STOP CAPTURE IF NO MORE SD CARD SPACE AND NO USB STICK
                     if trace > 0:
@@ -1917,33 +2134,44 @@ while True:
                         vf = str(ram_frames) + " - " + str(frames)
                          
                 if Capture == 0 and menu == -1:
-                    button(0,0,0)
-                    text(0,0,0,0,1,"CAPTURE",16,7)
-                    text(0,0,3,1,1,vf,14,7)
+                    button(0,0)
+                    text(0,0,0,1,"CAPTURE",16,7)
+                    text(0,3,1,1,vf,14,7)
                 elif menu == -1 :
-                    button(0,0,5)
-                    text(0,0,3,0,1,"CAPTURE",16,2)
+                    button(0,5)
+                    text(0,3,0,1,"CAPTURE",16,2)
                     vf = str(ram_frames) + " - " + str(frames)
-                    text(0,0,3,1,1,vf,14,2)
+                    text(0,3,1,1,vf,14,2)
                 if menu == -1:
-                    button(0,1,3)
-                    text(0,1,6,0,1,"RECORD",16,3)
-                    text(0,1,6,1,1,ss,12,3)
+                    button(1,3)
+                    text(1,6,0,1,"RECORD",16,3)
+                    text(1,6,1,1,ss,12,3)
                 pause_thread = False
         if show == 0 and show_vid == 1:
           if trace > 0:
               print ("SHOW FRAME")
           if zoom == 0:
-              cropped = pygame.transform.scale(image,(pre_width,pre_height))
+              if sw_crop != sh_crop:
+                  cropped = pygame.transform.scale(image,(pre_width,pre_height))
+              else:
+                  cropped = pygame.transform.scale(image,(pre_height,pre_height))
           else:
               cropped = pygame.surfarray.make_surface(z_crop)
-              cropped = pygame.transform.scale(cropped,(pre_width,pre_height))
+              if sw_crop != sh_crop:
+                  cropped = pygame.transform.scale(cropped,(pre_width,pre_height))
+              else:
+                  cropped = pygame.transform.scale(cropped,(pre_height,pre_height))
+              
           windowSurfaceObj.blit(cropped,(0, 0))
           h_crop2 = h_crop * (1/(1-(zoom/10)))
           v_crop2 = v_crop * (1/(1-(zoom/10)))
-          a1 = a - (pre_width/2)
           b1 = b - (pre_height/2)
-          a2 = (pre_width/2) + (a1 * (1/(1-(zoom/10))))
+          if sw_crop != sh_crop:
+              a1 = a - (pre_width/2)
+              a2 = (pre_width/2) + (a1 * (1/(1-(zoom/10))))
+          else:
+              a1 = a - (pre_height/2)
+              a2 = (pre_height/2) + (a1 * (1/(1-(zoom/10))))
           b2 = (pre_height/2) + (b1 * (1/(1-(zoom/10))))
           # show colour filtering
           if col_filter < 4 and (preview == 1 or col_timer > 0) and os.path.exists('/run/shm/qw.jpg'):
@@ -1963,22 +2191,28 @@ while True:
             else:
                 windowSurfaceObj.blit(imagep,(a2 - h_crop2,b2 - v_crop2), (0, 0,pre_width-(a2-h_crop2),v_crop2*2))
           # show detection area
-          if a2 + h_crop2 <= pre_width:
-              pygame.draw.rect(windowSurfaceObj, (0,255,0), Rect(a2 - h_crop2,b2 - v_crop2 ,h_crop2*2,v_crop2*2), 2)
-          elif a2 - h_crop2 < pre_width:
-              pygame.draw.line(windowSurfaceObj, (0,255,0),[a2 - h_crop2,b2 - v_crop2],[pre_width ,b2 - v_crop2], width=1)
-              pygame.draw.line(windowSurfaceObj, (0,255,0),[a2 - h_crop2,b2 - v_crop2],[a2 - h_crop2 ,b2 + v_crop2], width=1)
-              pygame.draw.line(windowSurfaceObj, (0,255,0),[a2 - h_crop2,b2 + v_crop2],[pre_width ,b2 + v_crop2], width=1)
-
+          if xx == 0 and yy == 0:
+              if a2 + h_crop2 <= pre_width:
+                  pygame.draw.rect(windowSurfaceObj, (0,255,0), Rect(a2 - h_crop2,b2 - v_crop2 ,h_crop2*2,v_crop2*2), 2)
+              elif a2 - h_crop2 < pre_width:
+                  pygame.draw.line(windowSurfaceObj, (0,255,0),[a2 - h_crop2,b2 - v_crop2],[pre_width ,b2 - v_crop2], width=1)
+                  pygame.draw.line(windowSurfaceObj, (0,255,0),[a2 - h_crop2,b2 - v_crop2],[a2 - h_crop2 ,b2 + v_crop2], width=1)
+                  pygame.draw.line(windowSurfaceObj, (0,255,0),[a2 - h_crop2,b2 + v_crop2],[pre_width ,b2 + v_crop2], width=1)
+              if sw_crop == sh_crop and zoom > 0:
+                  pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(pre_height,0,pre_width - pre_height,pre_height))
+                  pygame.display.update(0,0,pre_width,pre_height)
+          else:
+              print(xx,yy)
           # show mask
           nmask = pygame.surfarray.make_surface(mask)
           nmask = pygame.transform.scale(nmask,(h_crop2*2,v_crop2*2))
           nmask.set_colorkey((0,0,50))
           nmask.set_alpha(m_alpha)
-          if a2 + h_crop2 <= pre_width:
-              windowSurfaceObj.blit(nmask,(a2 - h_crop2,b2 - v_crop2))
-          else:
-              windowSurfaceObj.blit(nmask,(a2 - h_crop2,b2 - v_crop2), (0, 0,pre_width-(a2-h_crop2),v_crop2*2))
+          if xx == 0 and yy == 0:
+              if a2 + h_crop2 <= pre_width:
+                  windowSurfaceObj.blit(nmask,(a2 - h_crop2,b2 - v_crop2))
+              else:
+                  windowSurfaceObj.blit(nmask,(a2 - h_crop2,b2 - v_crop2), (0, 0,pre_width-(a2-h_crop2),v_crop2*2))
           if (Pi_Cam == 3 or Pi_Cam == 8) and fxz != 1 and zoom == 0 and menu == 3:
             pygame.draw.rect(windowSurfaceObj,(200,0,0),Rect(int(fxx*cwidth),int(fxy*cheight*.75),int(fxz*cwidth),int(fxz*cheight)),1)
           pygame.display.update(0,0,scr_width-bw,scr_height)
@@ -1993,27 +2227,27 @@ while True:
         if fcount < max_fcount and Pi != 5 and (Pi_Cam == 5 or Pi_Cam == 6) and AF_f_mode == 0:
             Capture = 0
             if menu == -1:
-                button(0,0,0)
-                text(0,0,0,0,1,"CAPTURE",16,7)
-                text(0,0,3,1,1,vf,14,7)
+                button(0,0)
+                text(0,0,0,1,"CAPTURE",16,7)
+                text(0,3,1,1,vf,14,7)
                 rep = 0
         elif Pi != 5 and (Pi_Cam == 5 or Pi_Cam == 6) and rep == 0 and AF_f_mode == 0:
             Capture = old_capture
             if menu == -1:
                 if Capture == 1 and frames + ram_frames == 0:
-                    button(0,0,4)
-                    text(0,0,6,0,1,"CAPTURE",16,4)
-                    text(0,0,3,1,1,vf,14,4)
+                    button(0,4)
+                    text(0,6,0,1,"CAPTURE",16,4)
+                    text(0,3,1,1,vf,14,4)
                 elif Capture == 1 and frames + ram_frames > 0:
-                    button(0,0,5)
-                    text(0,0,3,0,1,"CAPTURE",16,2)
-                    text(0,0,3,1,1,vf,14,2)
+                    button(0,5)
+                    text(0,3,0,1,"CAPTURE",16,2)
+                    text(0,3,1,1,vf,14,2)
                 else:
-                    button(0,0,0)
-                    text(0,0,0,0,1,"CAPTURE",16,7)
-                    text(0,0,3,1,1,vf,14,7)
-                text(0,9,3,0,1," ",14,7)
-                text(0,9,3,1,1," ",14,7)
+                    button(0,0)
+                    text(0,0,0,1,"CAPTURE",16,7)
+                    text(0,3,1,1,vf,14,7)
+                text(9,3,0,1," ",14,7)
+                text(9,3,1,1," ",14,7)
             rep = 1
                
     save_config = 0
@@ -2023,56 +2257,82 @@ while True:
             timer = time.monotonic()
             menu_timer = time.monotonic()
             mousex, mousey = event.pos
+            
             # screen capture
             if mousex < 10 and mousey < 10:
-                now = datetime.datetime.now()
+                now = datetime.now()
                 timestamp = now.strftime("%y%m%d%H%M%S")
                 pygame.image.save(windowSurfaceObj, timestamp + ".png")
+                
             # ZOOM
-            elif mousex < pre_width and (event.button == 4 or event.button == 5):
+            elif mousex < pre_width and (event.button == 4 or event.button == 5) and (menu == -1 or menu == 1 or menu == 6):
                 if event.button == 4:
                     zoom +=1
                     zoom = min(zoom,9)
                 elif event.button == 5:
                     zoom -=1
                     zoom = max(zoom,0)
-                if menu == -1:
                     if zoom == 0:
-                        button(0,10,0)
-                        text(0,10,2,0,1,"Zoom",14,7)
+                        xx = 0
+                        yy = 0
+                if menu == -1 or menu == 1 or menu == 2 or menu == 6 or menu == 7:
+                    if zoom == 0:
+                        button(10,0)
+                        text(10,2,0,1,"Zoom",14,7)
+                        xx = 0
+                        yy = 0
                     else:
-                        button(0,10,1)
-                        text(0,10,1,0,1,"Zoom",14,0)
-                        text(0,10,1,1,1,str(zoom),14,0)
+                        button(10,1)
+                        text(10,1,0,1,"Zoom",14,0)
+                        text(10,1,1,1,str(zoom),14,0)
+                        
+            # MOVE ZOOM
+            elif mousex < pre_width and event.button == 2 and zoom > 0:
+                xx += int((mousex - pre_width /2)/10)
+                yy += int((mousey - pre_height /2)/10)
+                za = int((pre_width/2)  * (1 - (zoom/10)))
+                zb = int((pre_height/2) * (1 - (zoom/10)))
+                z_crop = image2[xx + (int(pre_width/2)-za):xx + (int(pre_width/2)+za),yy + (int(pre_height/2)-zb):yy + (int(pre_height/2)+zb)]
+                if z_crop.shape[0] == 0 or z_crop.shape[1] == 0 or xx + (int(pre_width/2)-za) < 0 or xx + (int(pre_width/2)+za) > pre_width or yy + (int(pre_height/2)-zb) < 0 or yy + (int(pre_height/2)+zb) > pre_height:
+                    xx -= int((mousex - pre_width /2)/10)
+                    yy -= int((mousey - pre_height /2)/10)
+                        
             # set crop position
             elif mousex < pre_width and ((menu != 7 or ((Pi_Cam == 3 or Pi_Cam == 8) and AF_f_mode == 1)) or (Pi_Cam == 5 or Pi_Cam == 6)) and event.button == 1:
                 if (Pi_Cam == 5 or Pi_Cam == 6):
                     fcount = 0
-                a = mousex
-                b = mousey
-                if a + h_crop > pre_width:
+                if sensor_crop < 9 or zoom == 0:
+                  a = mousex
+                  b = mousey
+                  if (a + h_crop > pre_width):
                    a = pre_width - h_crop
-                if b + v_crop > pre_height:
+                  if (a + h_crop > pre_height and Pi_Cam == 4 and sensor_crop > 3):
+                   a = pre_height - h_crop 
+                  if b + v_crop > pre_height:
                    b = pre_height - v_crop
-                if a - h_crop < 0:
+                  if a - h_crop < 0:
                    a = h_crop
-                if b - v_crop < 0:
+                  if b - v_crop < 0:
                    b = v_crop
-                a1 = a - (pre_width/2)
-                b1 = b - (pre_height/2)
-                a = int((pre_width/2) + (a1 / (1/(1-(zoom/10)))))
-                b = int((pre_height/2) + (b1 / (1/(1-(zoom/10)))))
-                oldimg = []
-                save_config = 1
-                change_crop = 1
+                  a1 = a - (pre_width/2)
+                  b1 = b - (pre_height/2)
+                  a = int((pre_width/2) + (a1 / (1/(1-(zoom/10)))))
+                  b = int((pre_height/2) + (b1 / (1/(1-(zoom/10)))))
+                  oldimg = []
+                  save_config = 1
+                  change_crop = 1
                 
             # set mask
-            if mousex < pre_width and event.button == 3 :
+            if mousex < pre_width and event.button == 3 and xx == 0 and yy == 0: # and (sensor_crop < 4 or zoom == 0):
                 h_crop2 = h_crop * (1/(1-(zoom/10)))
                 v_crop2 = v_crop * (1/(1-(zoom/10)))
-                a1 = a - (pre_width/2)
+                if sw_crop == sh_crop:
+                    a1 = a - (pre_height/2)
+                    a2 = (pre_height/2) + (a1 * (1/(1-(zoom/10))))
+                else:
+                    a1 = a - (pre_width/2)
+                    a2 = (pre_width/2) + (a1 * (1/(1-(zoom/10))))
                 b1 = b - (pre_height/2)
-                a2 = (pre_width/2) + (a1 * (1/(1-(zoom/10))))
                 b2 = (pre_height/2) + (b1 * (1/(1-(zoom/10))))
                 if mousex > a2 - h_crop2 and mousex < a2 + h_crop2 and mousey < b2 + v_crop2 and mousey > b2 - v_crop2:
                     mx = int(mousex - (a2 - h_crop2))
@@ -2114,7 +2374,7 @@ while True:
                 fxz = int((h_crop * 2) * (swidth/pre_width))
                 fxa = int((v_crop * 2) * (sheight/pre_height))
                 picam2.set_controls({"AfMode" : controls.AfModeEnum.Continuous,"AfMetering" : controls.AfMeteringEnum.Windows,"AfWindows" : [ (fxx,fxy,fxz,fxa) ] } )
-                text(0,4,3,1,1,"Spot",14,7)
+                text(4,3,1,1,"Spot",14,7)
                 if camera == 0:
                     AF_f_spot = 1
                 else:
@@ -2124,6 +2384,8 @@ while True:
                 
             # keys   
             elif mousex > cwidth:
+                xx = 0
+                yy = 0
                 g = int(mousey/bh)
                 gv = mousey - (g * bh)
                 h = 0
@@ -2138,32 +2400,35 @@ while True:
                     # Move RAM FRAMES to SD CARD
                     if ram_frames > 0:
                         if menu == -1 :
-                            button(0,0,1)
-                            text(0,0,5,0,1,"CAPTURE",16,0)
+                            button(0,1)
+                            text(0,5,0,1,"CAPTURE",16,0)
                         zpics = glob.glob('/run/shm/*.jpg')
                         zpics.sort()
-                        for xx in range(0,len(zpics)):
-                            shutil.copy(zpics[xx], h_user + '/Videos/')
+                        for xxx in range(0,len(zpics)):
+                            shutil.copy(zpics[xxx], h_user + '/Videos/')
                         zpics = glob.glob('/run/shm/*.mp4')
                         zpics.sort()
-                        for xx in range(0,len(zpics)):
-                            shutil.copy(zpics[xx], h_user + '/Videos/')
+                        for xxx in range(0,len(zpics)):
+                            shutil.copy(zpics[xxx], h_user + '/Videos/')
                     # Move MP4s to USB if present
-                    USB_Files  = []
-                    USB_Files  = (os.listdir(m_user))
-                    if len(USB_Files) > 0:
-                        Videos = glob.glob(h_user + '/Videos/*.mp4')
-                        Videos.sort()
-                        for xx in range(0,len(Videos)):
-                            movi = Videos[xx].split("/")
-                            if not os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
-                                shutil.move(Videos[xx],m_user + "/" + USB_Files[0] + "/Videos/")
+                    #USB_Files  = []
+                    #USB_Files  = (os.listdir(m_user))
+                    #if len(USB_Files) > 0:
+                    #    Videos = glob.glob(h_user + '/Videos/*.mp4')
+                    #    Videos.sort()
+                    #    for xxx in range(0,len(Videos)):
+                    #       movi = Videos[xxx].split("/")
+                    #        if not os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
+                    #            shutil.move(Videos[xxx],m_user + "/" + USB_Files[0] + "/Videos/")
                     if use_gpio == 1 and fan_ctrl == 1:
                         led_fan.value = 0
                     stop_thread = True
-                    led_sw_ir.off()
-                    led_sw_ir1.off()
-                    led_ir_light.off()
+                    if use_gpio == 1:
+                        led_sw_ir.off()
+                        led_sw_ir1.off()
+                        led_ir_light.off()
+                    if trace > 0:
+                         print ("Step 13 PYGAME.QUIT")
                     pygame.quit()
 
                 elif g == 11 and menu != -1:
@@ -2195,19 +2460,27 @@ while True:
                     # CAPTURE
                     Capture +=1
                     zoom = 0
+                    xx = 0
+                    yy = 0
                     if Capture > 1:
                         Capture = 0
-                        button(0,0,0)
-                        text(0,0,0,0,1,"CAPTURE",16,7)
-                        text(0,0,3,1,1,vf,14,7)
+                        button(0,0)
+                        text(0,0,0,1,"CAPTURE",16,7)
+                        text(0,3,1,1,vf,14,7)
+                        zoom = 0
+                        button(10,0)
+                        text(10,2,0,1,"Zoom",14,7)
                         lapse_timer = 0
                         if encoding == 1:
                             stop_rec = 1
                     else:
                         num = 0
-                        button(0,0,4)
-                        text(0,0,6,0,1,"CAPTURE",16,4)
-                        text(0,0,3,1,1,vf,14,4)
+                        button(0,4)
+                        text(0,6,0,1,"CAPTURE",16,4)
+                        text(0,3,1,1,vf,14,4)
+                        zoom = 0
+                        button(10,0)
+                        text(10,2,0,1,"Zoom",14,7)
                     old_cap = Capture
                     lapse_timer = time.monotonic()
                     save_config = 1
@@ -2215,8 +2488,13 @@ while True:
                 elif g == 1 and menu == -1:
                     # RECORD
                     record = 1
-                    button(0,1,1)
-                    text(0,1,3,0,1,"RECORD",16,0)
+                    button(1,1)
+                    text(1,3,0,1,"RECORD",16,0)
+                    zoom = 0
+                    xx = 0
+                    yy = 0
+                    button(10,0)
+                    text(10,2,0,1,"Zoom",14,7)
 
                 elif menu == -1: 
                     # MENUS
@@ -2231,47 +2509,47 @@ while True:
                         menu_timer  = time.monotonic()
                         old_capture = Capture
                         Capture = 0
-                        for d in range(0,10):
-                            button(0,d,0)
-                        text(0,3,2,0,1,"Low Threshold",14,7)
-                        text(0,3,3,1,1,str(threshold),14,7)
-                        text(0,2,2,0,1,"High Detect %",14,7)
-                        text(0,2,3,1,1,str(det_high),14,7)
-                        text(0,1,2,0,1,"Low Detect %",14,7)
-                        text(0,1,3,1,1,str(detection),14,7)
+                        for d in range(0,12):
+                            button(d,0)
+                        text(3,2,0,1,"Low Threshold",14,7)
+                        text(3,3,1,1,str(threshold),14,7)
+                        text(2,2,0,1,"High Detect %",14,7)
+                        text(2,3,1,1,str(det_high),14,7)
+                        text(1,2,0,1,"Low Detect %",14,7)
+                        text(1,3,1,1,str(detection),14,7)
                         if preview == 1:
-                            button(0,0,1)
-                            text(0,0,1,0,1,"Preview",14,0)
-                            text(0,0,1,1,1,"Threshold",13,0)
+                            button(0,1)
+                            text(0,1,0,1,"Preview",14,0)
+                            text(0,1,1,1,"Threshold",13,0)
                         else:
-                            button(0,0,0)
-                            text(0,0,2,0,1,"Preview",14,7)
-                            text(0,0,2,1,1,"Threshold",13,7)
-                        text(0,4,2,0,1,"High Threshold",14,7)
-                        text(0,4,3,1,1,str(threshold2),14,7)
-                        text(0,5,2,0,1,"Horiz'l Crop",14,7)
-                        text(0,5,3,1,1,str(h_crop * 2),14,7)
-                        text(0,6,2,0,1,"Vert'l Crop",14,7)
-                        text(0,6,3,1,1,str(v_crop * 2),14,7)
-                        text(0,7,2,0,1,"Colour Filter",14,7)
-                        text(0,7,3,1,1,str(col_filters[col_filter]),14,7)
-                        text(0,8,2,0,1,"FULL Mask",14,7)
-                        text(0,8,3,1,1,"CLR   SET",14,7)
-                        text(0,9,2,0,1,"Noise Red'n",14,7)
-                        text(0,9,3,1,1,str(noise_filters[nr]),14,7)
-                        text(0,10,2,0,1,"BUZZER",14,7)
+                            button(0,0)
+                            text(0,2,0,1,"Preview",14,7)
+                            text(0,2,1,1,"Threshold",13,7)
+                        text(4,2,0,1,"High Threshold",14,7)
+                        text(4,3,1,1,str(threshold2),14,7)
+                        text(5,2,0,1,"Horiz'l Crop",14,7)
+                        text(5,3,1,1,str(h_crop * 2),14,7)
+                        text(6,2,0,1,"Vert'l Crop",14,7)
+                        text(6,3,1,1,str(v_crop * 2),14,7)
+                        text(7,2,0,1,"Colour Filter",14,7)
+                        text(7,3,1,1,str(col_filters[col_filter]),14,7)
+                        text(8,2,0,1,"FULL Mask",14,7)
+                        text(8,3,1,1,"CLR   SET",14,7)
+                        text(9,2,0,1,"Noise Red'n",14,7)
+                        text(9,3,1,1,str(noise_filters[nr]),14,7)
+                        text(10,2,0,1,"BUZZER",14,7)
                         if use_buzz == 0:
-                            text(0,10,3,1,1,"OFF",14,7)
+                            text(10,3,1,1,"OFF",14,7)
                         else:
-                            text(0,10,3,1,1,"ON",14,7)
-                        text(0,11,1,0,1,"MAIN MENU",14,7)
+                            text(10,3,1,1,"ON",14,7)
+                        text(11,1,0,1,"MAIN MENU",14,7)
 
                     elif g == 2 and event.button == 3: # right click
                         # PREVIEW
                         preview +=1
                         if preview > 1:
                             preview = 0
-                            text(0,2,1,1,1,"Settings",14,7)
+                            text(2,1,1,1,"Settings",14,7)
                             
                     elif g == 3:
                         # camera 1 settings 1
@@ -2286,15 +2564,15 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                        for d in range(0,10):
-                            button(0,d,0)
-                        text(0,7,5,0,1,"Meter",14,7)
-                        text(0,7,3,1,1,meters[meter],14,7)
-                        text(0,0,5,0,1,"fps",14,7)
-                        text(0,0,3,1,1,str(fps),14,7)
-                        text(0,1,5,0,1,"Mode",14,7)
-                        text(0,1,3,1,1,modes[mode],14,7)
-                        text(0,2,5,0,1,"Shutter",14,7)
+                        for d in range(0,12):
+                            button(d,0)
+                        text(7,5,0,1,"Meter",14,7)
+                        text(7,3,1,1,meters[meter],14,7)
+                        text(0,5,0,1,"fps",14,7)
+                        text(0,3,1,1,str(fps),14,7)
+                        text(1,5,0,1,"Mode",14,7)
+                        text(1,3,1,1,modes[mode],14,7)
+                        text(2,5,0,1,"Shutter",14,7)
                         shutter = shutters[speed]
                         if shutter < 0:
                             shutter = abs(1/shutter)
@@ -2303,39 +2581,46 @@ while True:
                             sspeed +=1
                         if mode == 0:
                             if shutters[speed] < 0:
-                                text(0,2,3,1,1,"1/" + str(abs(shutters[speed])),14,7)
+                                text(2,3,1,1,"1/" + str(abs(shutters[speed])),14,7)
                             else:
-                                text(0,2,3,1,1,str(shutters[speed]),14,7)
+                                text(2,3,1,1,str(shutters[speed]),14,7)
                         else:
                             if shutters[speed] < 0:
-                               text(0,2,0,1,1,"1/" + str(abs(shutters[speed])),14,7)
+                               text(2,0,1,1,"1/" + str(abs(shutters[speed])),14,7)
                             else:
-                               text(0,2,0,1,1,str(shutters[speed]),14,7)
-                        text(0,3,5,0,1,"gain",14,7)
+                               text(2,0,1,1,str(shutters[speed]),14,7)
+                        text(3,5,0,1,"gain",14,7)
                         if gain > 0:
-                            text(0,3,3,1,1,str(gain),14,7)
+                            text(3,3,1,1,str(gain),14,7)
                         else:
-                            text(0,3,3,1,1,"Auto",14,7)
-                        text(0,4,5,0,1,"Brightness",14,7)
-                        text(0,4,3,1,1,str(brightness),14,7)
-                        text(0,5,5,0,1,"Contrast",14,7)
-                        text(0,5,3,1,1,str(contrast),14,7)
-                        text(0,6,5,0,1,"eV",14,7)
-                        text(0,6,3,1,1,str(ev),14,7)
-                        text(0,7,5,0,1,"Metering",14,7)
-                        text(0,7,3,1,1,str(meters[meter]),14,7)
-                        text(0,8,5,0,1,"Sharpness",14,7)
-                        text(0,8,3,1,1,str(sharpness),14,7)
+                            text(3,3,1,1,"Auto",14,7)
+                        text(4,5,0,1,"Brightness",14,7)
+                        text(4,3,1,1,str(brightness),14,7)
+                        text(5,5,0,1,"Contrast",14,7)
+                        text(5,3,1,1,str(contrast),14,7)
+                        text(6,5,0,1,"eV",14,7)
+                        text(6,3,1,1,str(ev),14,7)
+                        text(7,5,0,1,"Metering",14,7)
+                        text(7,3,1,1,str(meters[meter]),14,7)
+                        text(8,5,0,1,"Sharpness",14,7)
+                        text(8,3,1,1,str(sharpness),14,7)
                         if Pi_Cam != 11:
-                            text(0,9,5,0,1,"Saturation",14,7)
-                            text(0,9,3,1,1,str(saturation),14,7)
-                        if zoom == 0:
-                            button(0,10,0)
-                            text(0,10,2,0,1,"Zoom",14,7)
+                            text(9,5,0,1,"Saturation",14,7)
+                            text(9,3,1,1,str(saturation),14,7)
+                        if Pi == 5:
+                            text(10,5,0,1,"Night",14,7)
+                            if HDRnight == 1:
+                                text(10,3,1,1,"ON",14,7)
+                            else:
+                                text(10,3,1,1,"OFF",14,7)
+                        elif zoom == 0:
+                            button(10,0)
+                            text(10,2,0,1,"Zoom",14,7)
                         else:
-                            button(0,10,1)
-                            text(0,10,1,0,1,"Zoom",14,0)
-                        text(0,11,1,0,1,"MAIN MENU",14,7)
+                            button(10,1)
+                            text(10,1,0,1,"Zoom",14,0)
+                            text(10,1,1,1,str(zoom),14,0)
+                        text(11,1,0,1,"MAIN MENU",14,7)
                         # restart circular buffer
                         start_buffer()
                         set_parameters()
@@ -2351,61 +2636,57 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
-                        for d in range(0,10):
-                            button(0,d,0)
+                        for d in range(0,12):
+                            button(d,0)
                         if IRF_on == 0:
-                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
+                            text(0,2,0,1,"IR Filter (OFF)",14,7)
                         else:
-                            text(0,0,1,0,1,"IR Filter (ON)",14,7)
-                        text(0,0,3,1,1,IR_filters[IRF],14,7)
+                            text(0,1,0,1,"IR Filter (ON)",14,7)
+                        text(0,3,1,1,IR_filters[IRF],14,7)
                         if Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6:
-                            text(0,4,2,0,1,"Focus",14,7)
+                            text(4,2,0,1,"Focus",14,7)
                             if AF_f_mode == 0:
-                                text(0,5,2,0,1,"Focus Manual",14,7)
+                                text(5,2,0,1,"Focus Manual",14,7)
                                 if Pi_Cam == 3:
                                     fd = 1/(AF_focus)
-                                    text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
+                                    text(5,3,1,1,str(fd)[0:5] + "m",14,7)
                                 else:
-                                    text(0,5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
+                                    text(5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
 
-                            text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
+                            text(4,3,1,1,AF_f_modes[AF_f_mode],14,7)
                             if AF_f_spot == 1:
-                                text(0,4,3,1,1,"Spot",14,7)
+                                text(4,3,1,1,"Spot",14,7)
                         if Pi_Cam > -1:
-                            text(0,1,1,0,1,"IRF ON time",14,7)
+                            text(1,1,0,1,"IRF ON time",14,7)
                             if IRF == 0:
                                 clr = 2
                             else:
                                 clr = 3
                             if synced == 1:
-                                text(0,1,clr,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
+                                text(1,clr,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
                             else:
-                                text(0,1,0,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
-                            text(0,2,1,0,1,"IRF OFF time",14,7)
+                                text(1,0,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
+                            text(2,1,0,1,"IRF OFF time",14,7)
                             if synced == 1:
-                                text(0,2,clr,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
+                                text(2,clr,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
                             else:
-                                text(0,2,0,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
+                                text(2,0,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
                         if Pi_Cam != 11:
-                            text(0,6,5,0,1,"AWB",14,7)
-                            text(0,6,3,1,1,str(awbs[awb]),14,7)
-                            text(0,7,5,0,1,"Red",14,7)
-                            text(0,8,5,0,1,"Blue",14,7)
+                            text(6,5,0,1,"AWB",14,7)
+                            text(6,3,1,1,str(awbs[awb]),14,7)
+                            text(7,5,0,1,"Red",14,7)
+                            text(8,5,0,1,"Blue",14,7)
                             if awb == 6:
-                                text(0,7,3,1,1,str(red)[0:3],14,7)
-                                text(0,8,3,1,1,str(blue)[0:3],14,7)
+                                text(7,3,1,1,str(red)[0:3],14,7)
+                                text(8,3,1,1,str(blue)[0:3],14,7)
                             else:
-                                text(0,7,0,1,1,str(red)[0:3],14,7)
-                                text(0,8,0,1,1,str(blue)[0:3],14,7)
-                        text(0,9,5,0,1,"Denoise",14,7)
-                        text(0,9,3,1,1,str(denoises[denoise]),14,7)
-                        if zoom == 0:
-                            button(0,10,0)
-                            text(0,10,2,0,1,"Zoom",14,7)
-                        else:
-                            button(0,10,1)
-                            text(0,10,1,0,1,"Zoom",14,0)
-                        text(0,11,1,0,1,"MAIN MENU",14,7)
+                                text(7,0,1,1,str(red)[0:3],14,7)
+                                text(8,0,1,1,str(blue)[0:3],14,7)
+                        text(9,5,0,1,"Denoise",14,7)
+                        text(9,3,1,1,str(denoises[denoise]),14,7)
+                        text(10,2,0,1,"Crop Mode",14,7)
+                        text(10,3,1,1,str(sensor_crop) + ":" + str(vid_width) + "x" + str(vid_height),13,7)
+                        text(11,1,0,1,"MAIN MENU",14,7)
                         ir_on_time = (ir_on_hour * 60) + ir_on_mins
                         ir_of_time = (ir_of_hour * 60) + ir_of_mins
                         # restart circular buffer
@@ -2418,67 +2699,71 @@ while True:
                         menu_timer  = time.monotonic()
                         old_capture = Capture
                         Capture = 0
-                        for d in range(0,10):
-                            button(0,d,0)
-                        text(0,0,2,0,1,"Interval",14,7)
-                        text(0,0,3,1,1,str(interval) + " Secs",14,7)
-                        text(0,1,2,0,1,"Video Length",14,7)
-                        text(0,1,3,1,1,str(v_length/1000) + " Secs",14,7)
-                        text(0,2,2,0,1,"Vid Pre-Frames",14,7)
-                        text(0,2,3,1,1,str(pre_frames) + " Secs",14,7)
+                        for d in range(0,12):
+                            button(d,0)
+                        text(0,2,0,1,"Interval",14,7)
+                        text(0,3,1,1,str(interval) + " Secs",14,7)
+                        text(1,2,0,1,"Video Length",14,7)
+                        text(1,3,1,1,str(v_length/1000) + " Secs",14,7)
+                        text(2,2,0,1,"Vid Pre-Frames",14,7)
+                        text(2,3,1,1,str(pre_frames) + " Secs",14,7)
+                        text(3,2,0,1,"Vid Bitrate",14,7)
+                        text(3,3,1,1,str(bitrate),14,7)
+                        text(4,2,0,1,"Colour Filter",14,7)
+                        text(4,3,1,1,str(col_filters[col_filter]),14,7)
                         if Pi == 5 and cam2 != "1":
-                            text(0,5,1,0,1,"Camera: " + str(camera + 1),14,7)
-                            text(0,5,3,1,1,camera_sws[camera_sw],14,7)
+                            text(5,1,0,1,"Camera: " + str(camera + 1),14,7)
+                            text(5,3,1,1,camera_sws[camera_sw],14,7)
                         if cam2 != "1":
                             if camera_sw == 0:
                                 clr = 2
                             else:
                                 clr = 3
-                            text(0,6,1,0,1,"SW 2 to 1 time",14,7)
+                            text(6,1,0,1,"SW 2 to 1 time",14,7)
                             if synced == 1 and cam2 != "1":
-                                text(0,6,clr,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
+                                text(6,clr,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
                             else:
-                                text(0,6,0,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
-                            text(0,7,1,0,1,"SW 1 to 2 time",14,7)
+                                text(6,0,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
+                            text(7,1,0,1,"SW 1 to 2 time",14,7)
                             if synced == 1 and cam2 != "1":
-                                text(0,7,clr,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
+                                text(7,clr,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
                             else:
-                                text(0,7,0,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
-                        text(0,8,2,0,1,"Shutdown Mode",14,7)
-                        if sd_mode == 0:
-                            text(0,8,3,1,1,"SD_Set",14,7)
+                                text(7,0,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
+                        text(8,2,0,1,"Shutdown Mode",14,7)
+                        if st_mode == 0:
+                            text(8,3,1,1,"SD_Set",14,7)
                         else:
-                            text(0,8,3,1,1,"Sunset",14,7)                        
-                        if sd_mode == 1:
-                            text(0,9,2,0,1,"Start Rec Time",14,7)
-                            if synced == 1:
-                                text(0,9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
+                            text(8,3,1,1,"Sunset",14,7)                        
+                        if st_mode == 1:
+                            text(9,2,0,1,"Start Rec Time",14,7)
+                            if synced == 1 and on_sunrise == 1:
+                                text(9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
                             else:
-                                text(0,9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
-                            text(0,10,2,0,1,"Shutdown Time",14,7)
+                                text(9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
+                            text(10,2,0,1,"Shutdown Time",14,7)
                             if synced == 1:
-                                text(0,10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
+                                text(10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
                             else:
-                                text(0,10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
+                                text(10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
                         else:
-                            text(0,9,2,0,1,"Start Rec Time",14,7)
-                            if synced == 1:
-                                text(0,9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
+                            text(9,2,0,1,"Start Rec Time",14,7)
+                            if synced == 1 and on_sunrise == 1:
+                                text(9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
                             else:
-                                text(0,9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
-                            text(0,10,2,0,1,"Shutdown Time",14,7)
+                                text(9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
+                            text(10,2,0,1,"Shutdown Time",14,7)
                             if synced == 1:
-                                text(0,10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
+                                text(10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                             else:
-                                text(0,10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
-                        text(0,11,1,0,1,"MAIN MENU",14,7)                        
+                                text(10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
+                        text(11,1,0,1,"MAIN MENU",14,7)                        
 
                     elif g == 6: 
                         # show menu
                         menu = 4
                         menu_timer  = time.monotonic()
-                        for d in range(0,10):
-                            button(0,d,0)
+                        for d in range(0,12):
+                            button(d,0)
                         show = 1
                         old_cap = Capture
                         Jpegs = glob.glob(h_user + '/Videos/*.jpg')
@@ -2492,8 +2777,13 @@ while True:
                         q = 0
                         if len(Jpegs) > 0:
                             image = pygame.image.load(Jpegs[q])
-                            cropped = pygame.transform.scale(image, (pre_width,pre_height))
+                            if image.get_height() == image.get_width():
+                                cropped = pygame.transform.scale(image, (pre_height,pre_height))
+                            else:
+                                cropped = pygame.transform.scale(image, (pre_width,pre_height))
                             windowSurfaceObj.blit(cropped, (0, 0))
+                            if image.get_height() == image.get_width():
+                                 pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(pre_height,0,pre_width - pre_height,pre_height))
                             mp4 = Jpegs[q][:-4] + ".mp4"
                             cap = cv2.VideoCapture(mp4)
                             if not cap.isOpened():
@@ -2514,7 +2804,7 @@ while True:
                             windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
                             pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,pre_height,scr_width-bw,scr_height))
                             pygame.display.update()
-                            text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
+                            text(1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
                         else:
                             pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,0,scr_width-bw,scr_height))
                             fontObj = pygame.font.Font(None, 30)
@@ -2524,39 +2814,41 @@ while True:
                             msgRectobj.topleft = (10,10)
                             windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
                             pygame.display.update()
-                        text(0,0,2,0,1,"SHOW Camera",14,7)
+                        text(0,2,0,1,"SHOW Camera",14,7)
                         if old_show_vid == 0:
-                            text(0,0,3,1,1,"OFF",14,7)
+                            text(0,3,1,1,"OFF",14,7)
                         else:
-                            text(0,0,3,1,1,"ON",14,7)
+                            text(0,3,1,1,"ON",14,7)
                         if len(Jpegs) > 0:
-                            text(0,1,2,0,1,"Still",14,7)
-                            text(0,2,2,0,1,"SHOW ALL",14,7)
-                            text(0,2,2,1,1,"Stills",14,7)
-                            text(0,3,2,0,1,"Show Video",14,7)
-                        text(0,4,2,0,1,"annotate MP4",14,7)
+                            text(1,2,0,1,"Still",14,7)
+                            text(2,2,0,1,"SHOW ALL",14,7)
+                            text(2,2,1,1,"Stills",14,7)
+                            text(3,2,0,1,"Show Video",14,7)
+                        text(4,2,0,1,"annotate MP4",14,7)
                         if mp4_anno == 0:
-                            text(0,4,3,1,1,"No",14,7)
+                            text(4,3,1,1,"No",14,7)
                         else:
-                            text(0,4,3,1,1,"Yes",14,7)
+                            text(4,3,1,1,"Yes",14,7)
                         if len(Jpegs) > 0:
-                            text(0,7,2,0,1,"MAKE FULL",14,7)
-                            text(0,7,2,1,1,"MP4",14,7)
-                            text(0,6,3,0,1,"DELETE ",14,7)
-                            text(0,6,3,1,1,"VIDEO ",14,7)
+                            text(7,2,0,1,"MAKE FULL",14,7)
+                            text(7,2,1,1,"MP4",14,7)
+                            text(6,3,0,1,"DELETE ",14,7)
+                            text(6,3,1,1,"VIDEO ",14,7)
                             if frames > 0:
-                                text(0,8,2,0,1,"MOVE MP4",14,7)
-                                text(0,8,2,1,1,"to USB",14,7)
-                                text(0,9,2,0,1,"MOVE MP4s",14,7)
-                                text(0,9,2,1,1,"to USB",14,7)
+                                text(8,2,0,1,"MOVE MP4",14,7)
+                                text(8,2,1,1,"to USB",14,7)
+                                text(9,2,0,1,"MOVE MP4s",14,7)
+                                text(9,2,1,1,"to USB",14,7)
                             else:
-                                text(0,8,0,0,1,"MOVE MP4",14,7)
-                                text(0,8,0,1,1,"to USB",14,7)
-                                text(0,9,0,0,1,"MOVE MP4s",14,7)
-                                text(0,9,0,1,1,"to USB",14,7)
-                            text(0,10,3,0,1,"DELETE",14,7)
-                            text(0,10,3,1,1,"ALL VIDS  ",14,7)
-                        text(0,11,1,0,1,"MAIN MENU",14,7)
+                                text(8,0,0,1,"MOVE MP4",14,7)
+                                text(8,0,1,1,"to USB",14,7)
+                                text(9,0,0,1,"MOVE MP4s",14,7)
+                                text(9,0,1,1,"to USB",14,7)
+                            text(10,3,0,1,"DELETE",14,7)
+                            text(10,3,1,1,"ALL VIDS  ",14,7)
+                        else:
+                            text(10,3,0,1," ",14,7)
+                        text(11,1,0,1,"MAIN MENU",14,7)
                        
                     elif g == 7:
                         # other settings
@@ -2564,11 +2856,11 @@ while True:
                         menu_timer  = time.monotonic()
                         old_capture = Capture
                         Capture = 0
-                        for d in range(0,10):
-                            button(0,d,0)
-                        text(0,1,2,0,1,"Auto Time",14,7)
+                        for d in range(0,12):
+                            button(d,0)
+                        text(1,2,0,1,"Auto Time",14,7)
                         if Pi == 5:
-                            text(0,0,2,0,1,"CPU Temp/FAN",13,7)
+                            text(0,2,0,1,"CPU Temp/FAN",13,7)
                             if os.path.exists ('fantxt.txt'): 
                                 os.remove("fantxt.txt")
                             os.system("cat /sys/devices/platform/cooling_fan/hwmon/*/fan1_input >> fantxt.txt")
@@ -2577,53 +2869,53 @@ while True:
                                 line = file.readline()
                                 if line == "":
                                     line = 0
-                            text(0,0,1,1,1,str(int(temp)) + " / " + str(int(line)),14,7)
+                            text(0,1,1,1,str(int(temp)) + " / " + str(int(line)),14,7)
                         else:
-                            text(0,0,2,0,1,"CPU Temp",14,7)
-                            text(0,0,3,1,1,str(int(temp)),14,7)
+                            text(0,2,0,1,"CPU Temp",14,7)
+                            text(0,3,1,1,str(int(temp)),14,7)
                         if auto_time > 0:
-                            text(0,1,3,1,1,str(auto_time),14,7)
+                            text(1,3,1,1,str(auto_time),14,7)
                         else:
-                            text(0,1,3,1,1,"OFF",14,7)
-                        text(0,2,2,0,1,"RAM Limit MB",14,7)
-                        text(0,2,3,1,1,str(int(ram_limit)),14,7)
-                        text(0,3,2,0,1,"SD Limit %",14,7)
-                        text(0,3,3,1,1,str(int(SD_limit)),14,7)
-                        text(0,4,2,0,1,"SD Full Action",14,7)
+                            text(1,3,1,1,"OFF",14,7)
+                        text(2,2,0,1,"RAM Limit MB",14,7)
+                        text(2,3,1,1,str(int(ram_limit)),14,7)
+                        text(3,2,0,1,"SD Limit %",14,7)
+                        text(3,3,1,1,str(int(SD_limit)),14,7)
+                        text(4,2,0,1,"SD Full Action",14,7)
                         if SD_F_Act == 0:
-                            text(0,4,3,1,1,"STOP",14,7)
+                            text(4,3,1,1,"STOP",14,7)
                         elif SD_F_Act == 1:
-                            text(0,4,3,1,1,"DEL OLD",14,7)
+                            text(4,3,1,1,"DEL OLD",14,7)
                         else:
-                            text(0,4,3,1,1,"To USB",14,7)
+                            text(4,3,1,1,"To USB",14,7)
                         if use_gpio == 1:
                             if fan_ctrl == 1:
-                                text(0,5,2,0,1,"Fan Time S",14,7)
-                                text(0,5,3,1,1,str(check_time),14,7)
-                                text(0,6,2,0,1,"Fan Low degC",14,7)
-                                text(0,6,3,1,1,str(fan_low),14,7)
-                                text(0,7,2,0,1,"Fan High degC",14,7)
-                                text(0,7,3,1,1,str(fan_high),14,7)
-                            text(0,8,2,0,1,"Ext. Trigger",14,7)
+                                text(5,2,0,1,"Fan Time S",14,7)
+                                text(5,3,1,1,str(check_time),14,7)
+                                text(6,2,0,1,"Fan Low degC",14,7)
+                                text(6,3,1,1,str(fan_low),14,7)
+                                text(7,2,0,1,"Fan High degC",14,7)
+                                text(7,3,1,1,str(fan_high),14,7)
+                            text(8,2,0,1,"Ext. Trigger",14,7)
                             if ES == 0:
-                                text(0,8,3,1,1,"OFF",14,7)
+                                text(8,3,1,1,"OFF",14,7)
                             elif ES == 1:
-                                text(0,8,3,1,1,"Short",14,7)
+                                text(8,3,1,1,"Short",14,7)
                             else:
-                                text(0,8,3,1,1,"Long",14,7)
-                        text(0,9,2,0,1,"Use Ref",14,7)
+                                text(8,3,1,1,"Long",14,7)
+                        text(9,2,0,1,"Use Ref",14,7)
                         if use_ref == False:
-                            text(0,9,3,1,1,"OFF",14,7)
+                            text(9,3,1,1,"OFF",14,7)
                         else:
-                            text(0,9,3,1,1,"ON",14,7)
-                        text(0,10,2,0,1,"Det Speed",14,7)
-                        text(0,10,3,1,1,str(dspeed),14,7)
+                            text(9,3,1,1,"ON",14,7)
+                        text(10,2,0,1,"Det Speed",14,7)
+                        text(10,3,1,1,str(dspeed),14,7)
                         USB_Files  = []
                         USB_Files  = (os.listdir(m_user))
                         if len(USB_Files) > 0:
                             usedusb = os.statvfs(m_user + "/" + USB_Files[0] + "/Pictures/")
                             USB_storage = ((1 - (usedusb.f_bavail / usedusb.f_blocks)) * 100)
-                        text(0,11,1,0,1,"MAIN MENU",14,7)
+                        text(11,1,0,1,"MAIN MENU",14,7)
 
                     elif g == 8 and cam2 != "1":
                         # camera 2 settings 1
@@ -2639,14 +2931,13 @@ while True:
                         picam2.stop()
                         Camera_Version()
                          
-                         
-                        for d in range(0,10):
-                            button(0,d,0)
-                        text(0,0,5,0,1,"fps",14,7)
-                        text(0,0,3,1,1,str(fps1),14,7)
-                        text(0,1,5,0,1,"Mode",14,7)
-                        text(0,1,3,1,1,modes[mode1],14,7)
-                        text(0,2,5,0,1,"Shutter",14,7)
+                        for d in range(0,12):
+                            button(d,0)
+                        text(0,5,0,1,"fps",14,7)
+                        text(0,3,1,1,str(fps1),14,7)
+                        text(1,5,0,1,"Mode",14,7)
+                        text(1,3,1,1,modes[mode1],14,7)
+                        text(2,5,0,1,"Shutter",14,7)
                         shutter1 = shutters[speed1]
                         if shutter1 < 0:
                             shutter1 = abs(1/shutter1)
@@ -2655,40 +2946,48 @@ while True:
                             sspeed1 +=1
                         if mode1 == 0:
                             if shutters[speed1] < 0:
-                                text(0,2,3,1,1,"1/" + str(abs(shutters[speed1])),14,7)
+                                text(2,3,1,1,"1/" + str(abs(shutters[speed1])),14,7)
                             else:
-                                text(0,2,3,1,1,str(shutters[speed1]),14,7)
+                                text(2,3,1,1,str(shutters[speed1]),14,7)
                         else:
                             if shutters[speed1] < 0:
-                               text(0,2,0,1,1,"1/" + str(abs(shutters[speed1])),14,7)
+                               text(2,0,1,1,"1/" + str(abs(shutters[speed1])),14,7)
                             else:
-                               text(0,2,0,1,1,str(shutters[speed1]),14,7)
-                        text(0,3,5,0,1,"gain",14,7)
+                               text(2,0,1,1,str(shutters[speed1]),14,7)
+                        text(3,5,0,1,"gain",14,7)
                         if gain1 > 0:
-                            text(0,3,3,1,1,str(gain1),14,7)
+                            text(3,3,1,1,str(gain1),14,7)
                         else:
-                            text(0,3,3,1,1,"Auto",14,7)
-                        text(0,4,5,0,1,"Brightness",14,7)
-                        text(0,4,3,1,1,str(brightness1),14,7)
-                        text(0,5,5,0,1,"Contrast",14,7)
-                        text(0,5,3,1,1,str(contrast1),14,7)
-                        text(0,6,5,0,1,"eV",14,7)
-                        text(0,6,3,1,1,str(ev1),14,7)
-                        text(0,7,5,0,1,"Metering",14,7)
-                        text(0,7,3,1,1,str(meters[meter1]),14,7)
-                        text(0,8,5,0,1,"Sharpness",14,7)
-                        text(0,8,3,1,1,str(sharpness1),14,7)
+                            text(3,3,1,1,"Auto",14,7)
+                        text(4,5,0,1,"Brightness",14,7)
+                        text(4,3,1,1,str(brightness1),14,7)
+                        text(5,5,0,1,"Contrast",14,7)
+                        text(5,3,1,1,str(contrast1),14,7)
+                        text(6,5,0,1,"eV",14,7)
+                        text(6,3,1,1,str(ev1),14,7)
+                        text(7,5,0,1,"Metering",14,7)
+                        text(7,3,1,1,str(meters[meter1]),14,7)
+                        text(8,5,0,1,"Sharpness",14,7)
+                        text(8,3,1,1,str(sharpness1),14,7)
                         if Pi_Cam != 11:
-                            text(0,9,5,0,1,"Saturation",14,7)
-                            text(0,9,3,1,1,str(saturation1),14,7)
-                        if zoom == 0:
-                            button(0,10,0)
-                            text(0,10,2,0,1,"Zoom",14,7)
+                            text(9,5,0,1,"Saturation",14,7)
+                            text(9,3,1,1,str(saturation1),14,7)
+                        if Pi == 5:
+                            text(10,5,0,1,"Night",14,7)
+                            if HDRnight1 == 1:
+                                text(10,3,1,1,"ON",14,7)
+                            else:
+                                text(10,3,1,1,"OFF",14,7)
+                        elif zoom == 0:
+                            button(10,0)
+                            text(10,2,0,1,"Zoom",14,7)
                         else:
-                            button(0,10,1)
-                            text(0,10,1,0,1,"Zoom",14,0)
-                        text(0,11,1,0,1,"MAIN MENU",14,7)
+                            button(10,1)
+                            text(10,1,0,1,"Zoom",14,0)
+                            text(10,1,1,1,str(zoom),14,0)
+                        text(11,1,0,1,"MAIN MENU",14,7)
                         # restart circular buffer
+                        Camera_Version()
                         start_buffer()
                         set_parameters1()
 
@@ -2704,61 +3003,58 @@ while True:
                         picam2.stop()
                         Camera_Version()
 
-                        for d in range(0,10):
-                            button(0,d,0)
+                        for d in range(0,12):
+                            button(d,0)
                         if Pi_Cam == 3 or Pi_Cam == 8 or Pi_Cam == 5 or Pi_Cam == 6:
-                            text(0,4,2,0,1,"Focus",14,7)
-                            if AF_f_mode == 0:
-                                text(0,5,2,0,1,"Focus Manual",14,7)
+                            text(4,2,0,1,"Focus",14,7)
+                            if AF_f_mode1 == 0:
+                                text(5,2,0,1,"Focus Manual",14,7)
                                 if Pi_Cam == 3:
-                                    fd = 1/(AF_focus)
-                                    text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
+                                    fd = 1/(AF_focus1)
+                                    text(5,3,1,1,str(fd)[0:5] + "m",14,7)
                                 else:
-                                    text(0,5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
-                            text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
+                                    text(5,3,1,1,str(int(101-(AF_focus1 * 10))),14,7)
+                            text(4,3,1,1,AF_f_modes[AF_f_mode1],14,7)
                             if AF_f_spot1 == 1:
-                                text(0,4,3,1,1,"Spot",14,7)
+                                text(4,3,1,1,"Spot",14,7)
                         if Pi_Cam > -1:
-                            text(0,1,1,0,1,"IRF ON time",14,7)
+                            text(1,1,0,1,"IRF ON time",14,7)
                             if IRF1 == 0:
                                 clr = 2
                             else:
                                 clr = 3
                             if synced == 1 and cam2 != "1":
-                                text(0,1,clr,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
+                                text(1,clr,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
                             else:
-                                text(0,1,0,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
-                            text(0,2,1,0,1,"IRF OFF time",14,7)
+                                text(1,0,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
+                            text(2,1,0,1,"IRF OFF time",14,7)
                             if synced == 1 and cam2 != "1":
-                                text(0,2,clr,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
+                                text(2,clr,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
                             else:
-                                text(0,2,0,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
+                                text(2,0,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
                         if Pi_Cam != 11:
-                            text(0,6,5,0,1,"AWB",14,7)
-                            text(0,6,3,1,1,str(awbs[awb1]),14,7)
-                            text(0,7,5,0,1,"Red",14,7)
-                            text(0,8,5,0,1,"Blue",14,7)
+                            text(6,5,0,1,"AWB",14,7)
+                            text(6,3,1,1,str(awbs[awb1]),14,7)
+                            text(7,5,0,1,"Red",14,7)
+                            text(8,5,0,1,"Blue",14,7)
                             if awb1 == 6:
-                                text(0,7,3,1,1,str(red1)[0:3],14,7)
-                                text(0,8,3,1,1,str(blue1)[0:3],14,7)
+                                text(7,3,1,1,str(red1)[0:3],14,7)
+                                text(8,3,1,1,str(blue1)[0:3],14,7)
                             else:
-                                text(0,7,0,1,1,str(red1)[0:3],14,7)
-                                text(0,8,0,1,1,str(blue1)[0:3],14,7)
-                        text(0,9,5,0,1,"Denoise",14,7)
-                        text(0,9,3,1,1,str(denoises[denoise1]),14,7)
-                        if zoom == 0:
-                            button(0,10,0)
-                            text(0,10,2,0,1,"Zoom",14,7)
-                        else:
-                            button(0,10,1)
-                            text(0,10,1,0,1,"Zoom",14,0)
+                                text(7,0,1,1,str(red1)[0:3],14,7)
+                                text(8,0,1,1,str(blue1)[0:3],14,7)
+                        text(9,5,0,1,"Denoise",14,7)
+                        text(9,3,1,1,str(denoises[denoise1]),14,7)
+                        text(10,2,0,1,"Crop Mode",14,7)
+                        text(10,3,1,1,str(sensor_crop) + ":" + str(vid_width) + "x" + str(vid_height) ,14,7)
                         if IRF_on == 0:
-                            text(0,0,2,0,1,"IR Filter (OFF)",14,7)
+                            text(0,2,0,1,"IR Filter (OFF)",14,7)
                         else:
-                            text(0,0,1,0,1,"IR Filter (ON)",14,7)
-                        text(0,0,3,1,1,IR_filters[IRF1],14,7)
-                        text(0,11,1,0,1,"MAIN MENU",14,7)
+                            text(0,1,0,1,"IR Filter (ON)",14,7)
+                        text(0,3,1,1,IR_filters[IRF1],14,7)
+                        text(11,1,0,1,"MAIN MENU",14,7)
                         # restart circular buffer
+                        Camera_Version()
                         start_buffer()
                         set_parameters1()
                         
@@ -2771,13 +3067,15 @@ while True:
                             zoom -=1
                             zoom = max(zoom,0)
                         if zoom > 0:
-                            button(0,10,1)
-                            text(0,10,1,0,1,"Zoom",14,0)
-                            text(0,10,1,1,1,str(zoom),14,0)
+                            button(10,1)
+                            text(10,1,0,1,"Zoom",14,0)
+                            text(10,1,1,1,str(zoom),14,0)
                         else:
                             zoom = 0
-                            button(0,10,0)
-                            text(0,10,2,0,1,"Zoom",14,7)
+                            button(10,0)
+                            text(10,2,0,1,"Zoom",14,7)
+                            xx = 0
+                            yy = 0
 
                                         
 # MENU 0 === DETECTION =================================================================================================
@@ -2787,13 +3085,13 @@ while True:
                     preview +=1
                     if preview > 1:
                         preview = 0
-                        button(0,0,0)
-                        text(0,0,2,0,1,"Preview",14,7)
-                        text(0,0,2,1,1,"Threshold",13,7)
+                        button(0,0)
+                        text(0,2,0,1,"Preview",14,7)
+                        text(0,2,1,1,"Threshold",13,7)
                     else:
-                        button(0,0,1)
-                        text(0,0,1,0,1,"Preview",14,0)
-                        text(0,0,1,1,1,"Threshold",13,0)
+                        button(0,1)
+                        text(0,1,0,1,"Preview",14,0)
+                        text(0,1,1,1,"Threshold",13,0)
                     save_config = 1
                     
                   elif g == 1:
@@ -2804,7 +3102,7 @@ while True:
                     else:
                         detection -=1
                         detection = max(detection,0)
-                    text(0,1,3,1,1,str(detection),14,7)
+                    text(1,3,1,1,str(detection),14,7)
                     save_config = 1
 
                   elif g == 2:
@@ -2812,11 +3110,11 @@ while True:
                     if (h == 1 and event.button == 1) or event.button == 4:
                         det_high +=1
                         det_high = min(det_high,100)
-                        text(0,2,3,1,1,str(det_high),14,7)
+                        text(2,3,1,1,str(det_high),14,7)
                     else:
                         det_high -=1
                         det_high = max(det_high,detection)
-                        text(0,2,3,1,1,str(det_high),14,7)
+                        text(2,3,1,1,str(det_high),14,7)
                     save_config = 1
                     
                   elif g == 3:
@@ -2824,14 +3122,14 @@ while True:
                     if (h == 1 and event.button == 1) or event.button == 4:
                         threshold +=1
                         threshold = min(threshold,threshold2 - 1)
-                        text(0,3,2,0,1,"Low Threshold",14,7)
-                        text(0,3,3,1,1,str(threshold),14,7)
+                        text(3,2,0,1,"Low Threshold",14,7)
+                        text(3,3,1,1,str(threshold),14,7)
                         lapse_timer = 0
                     else:
                         threshold -=1
                         threshold = max(threshold,0)
-                        text(0,3,2,0,1,"Low Threshold",14,7)
-                        text(0,3,3,1,1,str(threshold),14,7)
+                        text(3,2,0,1,"Low Threshold",14,7)
+                        text(3,3,1,1,str(threshold),14,7)
                         lapse_timer = 0
                     if threshold == 0:
                         lapse_timer = time.monotonic()
@@ -2844,16 +3142,16 @@ while True:
                     if (h == 1 and event.button == 1) or event.button == 4:
                         threshold2 +=1
                         threshold2 = min(threshold2,255)
-                        text(0,4,2,0,1,"High Threshold",14,7)
-                        text(0,4,3,1,1,str(threshold2),14,7)
+                        text(4,2,0,1,"High Threshold",14,7)
+                        text(4,3,1,1,str(threshold2),14,7)
                     else:
                         threshold2 -=1
                         threshold2 = max(threshold2,threshold + 1)
-                        text(0,4,2,0,1,"High Threshold",14,7)
-                        text(0,4,3,1,1,str(threshold2),14,7)
+                        text(4,2,0,1,"High Threshold",14,7)
+                        text(4,3,1,1,str(threshold2),14,7)
                     save_config = 1
 
-                  elif g == 5:
+                  elif g == 5 and event.button != 3:
                       # H CROP
                       if gv < bh/4:
                           mp = 1 - hp
@@ -2876,12 +3174,12 @@ while True:
                       else:
                           h_crop -=1
                           h_crop = max(h_crop,1)
-                      text(0,5,3,1,1,str(h_crop  * 2),14,7)
+                      text(5,3,1,1,str(h_crop  * 2),14,7)
                       mask,change = MaskChange()
                       change_crop = 1
                       save_config = 1
                     
-                  elif g == 6:
+                  elif g == 6 and event.button != 3:
                       # V CROP
                       if gv < bh/4:
                           mp = 1 - hp
@@ -2902,11 +3200,19 @@ while True:
                       else:
                           v_crop -=1
                           v_crop = max(v_crop,1)
-                      text(0,6,3,1,1,str(v_crop * 2),14,7)
+                      text(6,3,1,1,str(v_crop * 2),14,7)
                       mask,change = MaskChange()
                       change_crop = 1
                       save_config = 1                    
 
+                  elif (g == 5 or g == 6) and event.button == 3:
+					  # CENTRE DETECTION AREA
+                      a = int(pre_width/2)
+                      b = int(pre_height/2)
+                      oldimg = []
+                      save_config = 1
+                      change_crop = 1
+                
                   elif g == 7:
                       # COLOUR FILTER
                       if (h == 0 and event.button == 1) or event.button == 5:
@@ -2915,7 +3221,7 @@ while True:
                       else:
                           col_filter +=1
                           col_filter = min(col_filter,3)
-                      text(0,7,3,1,1,str(col_filters[col_filter]),14,7)
+                      text(7,3,1,1,str(col_filters[col_filter]),14,7)
                       save_config = 1
                       if col_filter < 4:
                           col_timer = time.monotonic()
@@ -2954,7 +3260,7 @@ while True:
                       else:
                           nr += 1
                           nr = min(nr,2)
-                      text(0,9,3,1,1,str(noise_filters[nr]),14,7)
+                      text(9,3,1,1,str(noise_filters[nr]),14,7)
                       save_config = 1
                     
                   elif g == 10:
@@ -2966,9 +3272,9 @@ while True:
                           use_buzz -=1
                           use_buzz = max(use_buzz,0)
                       if use_buzz == 0:
-                          text(0,10,3,1,1,"OFF",14,7)
+                          text(10,3,1,1,"OFF",14,7)
                       else:
-                          text(0,10,3,1,1,"ON",14,7)
+                          text(10,3,1,1,"ON",14,7)
                       save_config = 1
                     
 # MENU 1 === CAMERA 1 - 1 =================================================================================================
@@ -2982,7 +3288,7 @@ while True:
                         fps -=1
                         fps = max(fps,5)
                     picam2.set_controls({"FrameRate": fps})
-                    text(0,0,3,1,1,str(fps),14,7)
+                    text(0,3,1,1,str(fps),14,7)
                     save_config = 1                    
                    
                   elif g == 1:
@@ -2997,16 +3303,16 @@ while True:
                         picam2.set_controls({"AeEnable": False})
                         picam2.set_controls({"ExposureTime": sspeed})
                         if shutters[speed] < 0:
-                            text(0,2,3,1,1,"1/" + str(abs(shutters[speed])),14,7)
+                            text(2,3,1,1,"1/" + str(abs(shutters[speed])),14,7)
                         else:
-                            text(0,2,3,1,1,str(shutters[speed]),14,7)
+                            text(2,3,1,1,str(shutters[speed]),14,7)
                         picam2.set_controls({"AnalogueGain": gain})
                     else:
                         picam2.set_controls({"AeEnable": True})
                         if shutters[speed] < 0:
-                           text(0,2,0,1,1,"1/" + str(abs(shutters[speed])),14,7)
+                           text(2,0,1,1,"1/" + str(abs(shutters[speed])),14,7)
                         else:
-                           text(0,2,0,1,1,str(shutters[speed]),14,7)
+                           text(2,0,1,1,str(shutters[speed]),14,7)
                         if mode == 1:
                             picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Normal})
                         if mode == 2:
@@ -3014,7 +3320,7 @@ while True:
                         if mode == 3:
                             picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Long})
                         picam2.set_controls({"AnalogueGain": gain})
-                    text(0,1,3,1,1,modes[mode],14,7)
+                    text(1,3,1,1,modes[mode],14,7)
                     save_config = 1
                     
                   elif g == 2:
@@ -3039,14 +3345,14 @@ while True:
                         picam2.set_controls({"ExposureTime": sspeed})
                     if mode == 0:
                         if shutters[speed] < 0:
-                            text(0,2,3,1,1,"1/" + str(abs(shutters[speed])),14,7)
+                            text(2,3,1,1,"1/" + str(abs(shutters[speed])),14,7)
                         else:
-                            text(0,2,3,1,1,str(shutters[speed]),14,7)
+                            text(2,3,1,1,str(shutters[speed]),14,7)
                     else:
                         if shutters[speed] < 0:
-                            text(0,2,0,1,1,"1/" + str(abs(shutters[speed])),14,7)
+                            text(2,0,1,1,"1/" + str(abs(shutters[speed])),14,7)
                         else:
-                            text(0,2,0,1,1,str(shutters[speed]),14,7)
+                            text(2,0,1,1,str(shutters[speed]),14,7)
                     save_config = 1
                     
                   elif g == 3:
@@ -3059,9 +3365,9 @@ while True:
                         gain = max(gain,0)
                     picam2.set_controls({"AnalogueGain": gain})
                     if gain > 0:
-                        text(0,3,3,1,1,str(gain),14,7)
+                        text(3,3,1,1,str(gain),14,7)
                     else:
-                        text(0,3,3,1,1,"Auto",14,7)
+                        text(3,3,1,1,"Auto",14,7)
                     save_config = 1
                     
                   elif g == 4:
@@ -3073,7 +3379,7 @@ while True:
                         brightness -=1
                         brightness = max(brightness,0)
                     picam2.set_controls({"Brightness": brightness/10})
-                    text(0,4,3,1,1,str(brightness),14,7)
+                    text(4,3,1,1,str(brightness),14,7)
                     save_config = 1
                     
                   elif g == 5:
@@ -3085,7 +3391,7 @@ while True:
                         contrast -=1
                         contrast = max(contrast,0)
                     picam2.set_controls({"Contrast": contrast/10})
-                    text(0,5,3,1,1,str(contrast),14,7)
+                    text(5,3,1,1,str(contrast),14,7)
                     save_config = 1
 
                   elif g == 6:
@@ -3097,8 +3403,8 @@ while True:
                         ev -=1
                         ev = max(ev,-20)
                     picam2.set_controls({"ExposureValue": ev/10})
-                    text(0,6,5,0,1,"eV",14,7)
-                    text(0,6,3,1,1,str(ev),14,7)
+                    text(6,5,0,1,"eV",14,7)
+                    text(6,3,1,1,str(ev),14,7)
                     save_config = 1
                     
                   elif g == 7:
@@ -3115,7 +3421,7 @@ while True:
                         picam2.set_controls({"AeMeteringMode": controls.AeMeteringModeEnum.Spot})
                     elif meter == 2:
                         picam2.set_controls({"AeMeteringMode": controls.AeMeteringModeEnum.Matrix})
-                    text(0,7,3,1,1,str(meters[meter]),14,7)
+                    text(7,3,1,1,str(meters[meter]),14,7)
                     save_config = 1
 
                   elif g == 8:
@@ -3127,7 +3433,7 @@ while True:
                         sharpness -=1
                         sharpness = max(sharpness,0)
                     picam2.set_controls({"Sharpness": sharpness})
-                    text(0,8,3,1,1,str(sharpness),14,7)
+                    text(8,3,1,1,str(sharpness),14,7)
                     save_config = 1
 
                   elif g == 9 and Pi_Cam != 11:
@@ -3139,26 +3445,43 @@ while True:
                         saturation -=1
                         saturation = max(saturation,0)
                     picam2.set_controls({"Saturation": saturation/10})
-                    text(0,9,3,1,1,str(saturation),14,7)
+                    text(9,3,1,1,str(saturation),14,7)
                     save_config = 1
                     
                   elif g == 10:
-                      # ZOOM
-                      if (h == 1 and event.button == 1) or event.button == 4:
+                      if Pi == 5:
+                          if (h == 1 and event.button == 1) or event.button == 4:
+                              HDRnight +=1
+                              HDRnight = min(HDRnight,1)
+                          else:
+                              HDRnight -=1
+                              HDRnight = max(HDRnight,0)
+                          if HDRnight == 1:
+                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
+                              text(10,3,1,1,"ON",14,7)
+                          else:
+                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.Off})
+                              text(10,3,1,1,"OFF",14,7)
+                          save_config = 1
+                      else:
+                        # ZOOM
+                        if (h == 1 and event.button == 1) or event.button == 4:
                           zoom +=1
                           zoom = min(zoom,9)
-                      else:
+                        else:
                           zoom -=1
                           zoom = max(zoom,0)
-                      if zoom > 0:
-                          button(0,10,1)
-                          text(0,10,1,0,1,"Zoom",14,0)
-                          text(0,10,1,1,1,str(zoom),14,0)
-                      else:
+                        if zoom > 0:
+                          button(10,1)
+                          text(10,1,0,1,"Zoom",14,0)
+                          text(10,1,1,1,str(zoom),14,0)
+                        else:
                           zoom = 0
-                          button(0,10,0)
-                          text(0,10,2,0,1,"Zoom",14,7)
+                          button(10,0)
+                          text(10,2,0,1,"Zoom",14,7)
                           preview = 0
+                          xx = 0
+                          yy = 0
                     
 # MENU 2 === CAMERA 1 - 2=================================================================================================
                 elif menu == 2:
@@ -3170,28 +3493,30 @@ while True:
                     else:
                         IRF -=1
                         IRF = max(IRF,0)
-                    text(0,0,3,1,1,IR_filters[IRF],14,7)
+                    text(0,3,1,1,IR_filters[IRF],14,7)
                     if IRF == 2:
                         IRF_on = 0
-                        led_sw_ir.off()
-                        led_ir_light.on()
-                        text(0,0,2,0,1,"IR Filter (OFF)",14,7)
+                        if use_gpio == 1:
+                            led_sw_ir.off()
+                            led_ir_light.on()
+                        text(0,2,0,1,"IR Filter (OFF)",14,7)
                     elif IRF == 3:
                         IRF_on = 1
-                        led_sw_ir.on()
+                        if use_gpio == 1:
+                            led_sw_ir.on()
                         if IRF_on1 == 1:
                             led_ir_light.off()
-                        text(0,0,1,0,1,"IR Filter (ON)",14,7)
-                    if IRF == 0:
+                        text(0,1,0,1,"IR Filter (ON)",14,7)
+                    if IRF == 0 and st_mode == 1:
                         suntimes()
                     if synced == 1 and IRF == 0:
-                        text(0,1,2,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
+                        text(1,2,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
                     elif IRF == 0:
-                        text(0,1,0,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
+                        text(1,0,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
                     if synced == 1 and IRF == 0:                
-                        text(0,2,2,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
+                        text(2,2,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
                     elif IRF == 0:
-                        text(0,2,0,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
+                        text(2,0,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
                     save_config = 1
                     
                   elif g == 1 and IRF == 1:
@@ -3220,7 +3545,7 @@ while True:
                             ir_on_mins = 59
                             if ir_on_hour < 0:
                                 ir_on_hour = 23
-                    text(0,1,3,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
+                    text(1,3,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
                     ir_on_time = (ir_on_hour * 60) + ir_on_mins
                     ir_of_time = (ir_of_hour * 60) + ir_of_mins
                     if ir_on_time >= ir_of_time:
@@ -3231,7 +3556,7 @@ while True:
                             ir_of_hour += 1
                             if ir_of_hour > 23:
                                 ir_of_hour = 0
-                    text(0,2,3,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
+                    text(2,3,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
                     ir_of_time = (ir_of_hour * 60) + ir_of_mins
                     save_config = 1
 
@@ -3261,7 +3586,7 @@ while True:
                             ir_of_mins = 59
                             if ir_of_hour < 0:
                                 ir_of_hour = 23
-                    text(0,2,3,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
+                    text(2,3,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
 
                     ir_on_time = (ir_on_hour * 60) + ir_on_mins
                     ir_of_time = (ir_of_hour * 60) + ir_of_mins
@@ -3273,7 +3598,7 @@ while True:
                             ir_on_mins = 59
                             if ir_on_hour < 0:
                                 ir_on_hour = 23
-                    text(0,1,3,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
+                    text(1,3,1,1,("0" + str(ir_on_hour))[-2:] + ":" + ("0" + str(ir_on_mins))[-2:],14,7)
                       
                     ir_on_time = (ir_on_hour * 60) + ir_on_mins
                     save_config = 1
@@ -3308,19 +3633,19 @@ while True:
                         fxz = 1
                         picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
                         picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
-                    text(0,4,3,1,1,AF_f_modes[AF_f_mode],14,7)
+                    text(4,3,1,1,AF_f_modes[AF_f_mode],14,7)
                     if AF_f_mode == 0:
                         picam2.set_controls({"LensPosition": AF_focus})
-                        text(0,5,2,0,1,"Focus Manual",14,7)
+                        text(5,2,0,1,"Focus Manual",14,7)
                         if Pi_Cam == 3:
                             if AF_focus > 0:
                                 fd = 1/(AF_focus)
-                            text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
+                            text(5,3,1,1,str(fd)[0:5] + "m",14,7)
                         else:
-                            text(0,5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
+                            text(5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
                     else:
-                        text(0,5,3,0,1," ",14,7)
-                        text(0,5,3,1,1," ",14,7)
+                        text(5,3,0,1," ",14,7)
+                        text(5,3,1,1," ",14,7)
                     fxx = 0
                     fxy = 0
                     fxz = 1
@@ -3343,14 +3668,14 @@ while True:
                     AF_focus = min(AF_focus,10)
                     picam2.set_controls({"LensPosition": AF_focus})
                     if AF_focus == 0:
-                        text(0,5,3,1,1,"Inf",14,7)
+                        text(5,3,1,1,"Inf",14,7)
                     else:
                         if Pi_Cam == 3:
                             if AF_focus > 0:
                                 fd = 1/(AF_focus)
-                            text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
+                            text(5,3,1,1,str(fd)[0:5] + "m",14,7)
                         else:
-                            text(0,5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
+                            text(5,3,1,1,str(int(101-(AF_focus * 10))),14,7)
                     save_config = 1
                             
                
@@ -3378,13 +3703,13 @@ while True:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Custom})
                         cg = (red,blue)
                         picam2.set_controls({"AwbEnable": False,"ColourGains": cg})
-                    text(0,6,3,1,1,str(awbs[awb]),14,7)
+                    text(6,3,1,1,str(awbs[awb]),14,7)
                     if awb == 6:
-                        text(0,7,3,1,1,str(red)[0:3],14,7)
-                        text(0,8,3,1,1,str(blue)[0:3],14,7)
+                        text(7,3,1,1,str(red)[0:3],14,7)
+                        text(8,3,1,1,str(blue)[0:3],14,7)
                     else:
-                        text(0,7,0,1,1,str(red)[0:3],14,7)
-                        text(0,8,0,1,1,str(blue)[0:3],14,7)
+                        text(7,0,1,1,str(red)[0:3],14,7)
+                        text(8,0,1,1,str(blue)[0:3],14,7)
                     save_config = 1
                     
                   elif g == 7 and awb == 6 and Pi_Cam != 11:
@@ -3397,7 +3722,7 @@ while True:
                         red = min(red,8)
                     cg = (red,blue)
                     picam2.set_controls({"ColourGains": cg})
-                    text(0,7,3,1,1,str(red)[0:3],14,7)
+                    text(7,3,1,1,str(red)[0:3],14,7)
                     save_config = 1
                     
                   elif g == 8 and awb == 6 and Pi_Cam != 11:
@@ -3410,7 +3735,7 @@ while True:
                         blue = min(blue,8)
                     cg = (red,blue)
                     picam2.set_controls({"ColourGains": cg})
-                    text(0,8,3,1,1,str(blue)[0:3],14,7)
+                    text(8,3,1,1,str(blue)[0:3],14,7)
                     save_config = 1
                    
                   elif g == 9:
@@ -3428,26 +3753,35 @@ while True:
                     elif denoise == 2:
                         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
 
-                    text(0,9,3,1,1,str(denoises[denoise]),14,7)
+                    text(9,3,1,1,str(denoises[denoise]),14,7)
                     save_config = 1
                   
-                  elif g == 10:
-                      # ZOOM
+                  elif g == 10 and Pi_Cam != 8:
+                      # CROP MODE
                       if (h == 1 and event.button == 1) or event.button == 4:
-                          zoom +=1
-                          zoom = min(zoom,9)
+                          sensor_crop0 +=1
+                          if Pi_Cam == 4:
+                              sensor_crop0 = min(sensor_crop0,5)
+                          else:
+                              sensor_crop0 = min(sensor_crop0,2)
                       else:
-                          zoom -=1
-                          zoom = max(zoom,0)
-                      if zoom > 0:
-                          button(0,10,1)
-                          text(0,10,1,0,1,"Zoom",14,0)
-                          text(0,10,1,1,1,str(zoom),14,0)
-                      else:
-                          zoom = 0
-                          button(0,10,0)
-                          text(0,10,2,0,1,"Zoom",14,7)
-                          preview = 0
+                          sensor_crop0 -=1
+                          sensor_crop0 = max(sensor_crop0,0)
+                      text(10,2,0,1,"Crop Mode",14,7)
+                      text(10,3,1,1,str(sensor_crop0),14,7)
+                      pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,0,scr_width-bw,scr_height))
+                      pygame.display.update()
+                      picam2.stop_recording()
+                      pref = pre_frames * 1000
+                      circular = CircularOutput2(buffer_duration_ms=pref)
+                      # stop circular buffer
+                      picam2.close()
+                      picam2.stop()
+                      Camera_Version()
+                      # restart circular buffer
+                      start_buffer()
+                      set_parameters()
+                      save_config = 1
                     
 # MENU 3 === VIDEO & SWITCHING =================================================================================================
                 elif menu == 3:
@@ -3464,7 +3798,7 @@ while True:
                         interval = max(interval,0)
                     if threshold == 0:
                         interval = max(int(v_length/1000) + pre_frames + 1,interval)
-                    text(0,0,3,1,1,str(interval) + " Secs",14,7)
+                    text(0,3,1,1,str(interval) + " Secs",14,7)
                     save_config = 1
 
                   elif g == 1:
@@ -3481,12 +3815,12 @@ while True:
                         else:
                            v_length +=100
                         v_length = min(v_length,100000)
-                    text(0,1,3,1,1,str(v_length/1000) + " Secs",14,7)
+                    text(1,3,1,1,str(v_length/1000) + " Secs",14,7)
                     if threshold == 0:
                         lapse_timer = time.monotonic()
                         if v_length + (pre_frames * 1000) > interval * 1000 and interval > 0:
                            interval = int(v_length/1000) + (pre_frames) + 1
-                           text(0,0,3,1,1,str(interval) + " Secs",14,7)
+                           text(0,3,1,1,str(interval) + " Secs",14,7)
                     save_config = 1
                     
                   elif g == 2:
@@ -3497,21 +3831,42 @@ while True:
                     else:
                         pre_frames -=1
                         pre_frames = max(pre_frames,1)
-                    text(0,2,0,1,1,str(pre_frames) + " Secs",14,7)
+                    text(2,0,1,1,str(pre_frames) + " Secs",14,7)
                     picam2.stop_recording()
                     pref = pre_frames * 1000
                     circular = CircularOutput2(buffer_duration_ms=pref)
                     picam2.start_recording(encoder, circular)
                     time.sleep(pre_frames)
-                    text(0,2,3,1,1,str(pre_frames) + " Secs",14,7)
+                    text(2,3,1,1,str(pre_frames) + " Secs",14,7)
                     if threshold == 0:
                         lapse_timer = time.monotonic()
                         if v_length + (pre_frames * 1000) > interval * 1000 and interval > 0:
                            interval = int(v_length/1000) + (pre_frames) + 1
-                           text(0,0,3,1,1,str(interval) + " Secs",14,7)
+                           text(0,3,1,1,str(interval) + " Secs",14,7)
                     save_config = 1
                   
                   elif g == 3:
+                    # BITRATE
+                    if (h == 0 and event.button == 1) or event.button == 5:
+                        bitrate -=1
+                        bitrate = max(bitrate,1)
+                    else:
+                        bitrate +=1
+                        bitrate = min(bitrate,10)
+                    text(3,3,1,1,str(bitrate),14,7)
+                    bitrate2 = bitrate * 1000000
+                    picam2.close()
+                    picam2.stop()
+                    Camera_Version()
+                    # restart circular buffer
+                    start_buffer()
+                    if camera == 0:
+                        set_parameters()
+                    elif camera == 1:
+                        set_parameters1()
+                    save_config = 1
+                    
+                  elif g == 4:
                     # COLOUR FILTER
                     if (h == 0 and event.button == 1) or event.button == 5:
                         col_filter -=1
@@ -3519,23 +3874,14 @@ while True:
                     else:
                         col_filter +=1
                         col_filter = min(col_filter,3)
-                    text(0,3,3,1,1,str(col_filters[col_filter]),14,7)
+                    text(4,3,1,1,str(col_filters[col_filter]),14,7)
                     save_config = 1
                     if col_filter < 4:
                         col_timer = time.monotonic()
                     else:
                         col_timer = 0
 
-                  elif g == 4:
-                    # DETECTION SPEED
-                    if (h == 0 and event.button == 1) or event.button == 5:
-                        dspeed -=1
-                        dspeed = max(dspeed,1)
-                    else:
-                        dspeed +=1
-                        dspeed = min(dspeed,100)
-                    text(0,4,3,1,1,str(dspeed),14,7)
-                    save_config = 1  
+                  
                   
                   elif g == 5 and Pi == 5 and cam2 != "1":
                     # SWITCH CAMERA MODE
@@ -3546,16 +3892,17 @@ while True:
                     else:
                         camera_sw -=1
                         camera_sw = max(camera_sw,0)
-                    text(0,5,3,1,1,str(camera_sws[camera_sw]),14,7)
+                    text(5,3,1,1,str(camera_sws[camera_sw]),14,7)
                     if camera_sw == 2:
                         camera = 0
-                        if IRF_on == 1:
+                        if IRF_on == 1 and use_gpio == 1:
                             led_ir_light.off()
-                        text(0,5,1,0,1,"Camera: " + str(camera + 1),14,7)
+                        text(5,1,0,1,"Camera: " + str(camera + 1),14,7)
                     elif camera_sw == 3:
                         camera = 1
-                        led_ir_light.on()
-                        text(0,5,1,0,1,"Camera: " + str(camera + 1),14,7)
+                        if use_gpio == 1:
+                            led_ir_light.on()
+                        text(5,1,0,1,"Camera: " + str(camera + 1),14,7)
                     if camera_sw >= 2:
                         old_camera = camera
                         picam2.stop_recording()
@@ -3564,6 +3911,8 @@ while True:
                         picam2.close()
                         picam2.stop()
                         Camera_Version()
+                        pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,0,scr_width-bw,scr_height))
+                        pygame.display.update()
                         
                         # restart circular buffer
                         start_buffer()
@@ -3572,15 +3921,16 @@ while True:
                         else:
                             set_parameters1()
                     if camera_sw == 0:
-                      suntimes()
+                      if st_mode == 1:
+                          suntimes()
                       if synced == 1 and cam2 != "1":
-                          text(0,6,clr,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
+                          text(6,clr,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
                       else:
-                          text(0,6,0,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
+                          text(6,0,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
                       if synced == 1 and cam2 != "1":
-                          text(0,7,clr,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
+                          text(7,clr,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
                       else:
-                          text(0,7,0,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
+                          text(7,0,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
                     save_config = 1                        
 
                   elif g == 6 and camera_sw == 1:
@@ -3614,7 +3964,7 @@ while True:
                             on_mins = 59
                             if on_hour < 0:
                                 on_hour = 23
-                    text(0,6,3,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
+                    text(6,3,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
                     on_time = (on_hour * 60) + on_mins
                     of_time = (of_hour * 60) + of_mins
                     if on_time >= of_time:
@@ -3625,7 +3975,7 @@ while True:
                             of_mins = 0
                             if of_hour > 23:
                                 of_hour = 0
-                        text(0,7,3,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
+                        text(7,3,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
                         of_time = (of_hour * 60) + of_mins
                     save_config = 1
 
@@ -3663,7 +4013,7 @@ while True:
                             of_mins = 59
                             if of_hour < 0:
                                 of_hour = 23
-                    text(0,7,3,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
+                    text(7,3,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
                     on_time = (on_hour * 60) + on_mins
                     of_time = (of_hour * 60) + of_mins
                     if of_time <= on_time:
@@ -3674,33 +4024,35 @@ while True:
                             on_mins = 59
                             if on_hour < 0:
                                 on_hour = 23
-                        text(0,6,3,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
+                        text(6,3,1,1,("0" + str(on_hour))[-2:] + ":" + ("0" + str(on_mins))[-2:],14,7)
                         on_time = (on_hour * 60) + on_mins
                     save_config = 1
                    
                   elif g == 8 and event.button == 1:
                     # SHUTDOWN MODE
                     if h == 1:
-                        sd_mode +=1
-                        if sd_mode > 1:
-                            sd_mode = 0
+                        st_mode +=1
+                        if st_mode > 1:
+                            st_mode = 0
                     elif h == 0:
-                        sd_mode -=1
-                        if sd_mode  < 0:
-                            sd_mode = 1
-                    if sd_mode == 0:
-                        text(0,8,3,1,1,"SD_Set",14,7)
+                        st_mode -=1
+                        if st_mode  < 0:
+                            st_mode = 1
+                    if ep == 0:
+                        st_mode = 0
+                    if st_mode == 0:
+                        text(8,3,1,1,"SD_Set",14,7)
                         sd_mins = old_sd_mins
                         sd_hour = old_sd_hour
                         sd_time = old_sd_time
                     else:
-                        text(0,8,3,1,1,"Sunset",14,7)
-                        text(0,9,2,0,1,"Start Rec Time",14,7)
+                        text(8,3,1,1,"Sunset",14,7)
+                        text(9,2,0,1,"Start Rec Time",14,7)
                         if synced == 1:
-                            text(0,9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
+                            text(9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
                         else:
-                            text(0,9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
-                        text(0,10,2,0,1,"Shutdown Time",14,7)
+                            text(9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
+                        text(10,2,0,1,"Shutdown Time",14,7)
                         old_sd_mins = sd_mins
                         old_sd_hour = sd_hour
                         old_sd_time = sd_time
@@ -3717,45 +4069,45 @@ while True:
                             sd_hour -= 24
                         if sd_hour < 0:
                            sd_hour += 24
-                           sd_time = (sd_hour * 60) + sd_mins
+                        sd_time = (sd_hour * 60) + sd_mins
                     if synced == 1:
-                        if sd_mode == 1:
-                            text(0,9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
+                        if st_mode == 1 and on_sunrise == 1:
+                            text(9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
                         else:
-                            text(0,9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
-                        if sd_mode == 1:
-                            text(0,10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
+                            text(9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
+                        if st_mode == 1 :
+                            text(10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
                         else:
-                            text(0,10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
+                            text(10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                     else:
-                        if sd_mode == 1:
-                            text(0,9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
+                        if st_mode == 1:
+                            text(9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
                         else:
-                            text(0,9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
-                        if sd_mode == 1:
-                            text(0,10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
+                            text(9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
+                        if st_mode == 1:
+                            text(10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
                         else:
-                            text(0,10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
+                            text(10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                     start_up = time.monotonic()
                     save_config = 1
                     
                   elif g == 9:
-                    # SUNRISE START TIME
+                    # SUNRISE / RECORD START TIME
                     if (h == 1 and event.button == 3) or (h == 0 and event.button == 4):
                         ss_on_hour +=1
                         if ss_on_hour > 23:
                             ss_on_hour = 0
-                        if sd_mode == 1:
+                        if st_mode == 1:
                             sr_offset +=1
                     elif (h == 0 and event.button == 3)  or (h == 0 and event.button == 5):
                         ss_on_hour -=1
                         if ss_on_hour < 0:
                             ss_on_hour = 23
-                        if sd_mode == 1:
+                        if st_mode == 1:
                             sr_offset -=1
                     elif h == 1 and event.button == 5:
                         ss_on_mins -=1
-                        if sd_mode == 1:
+                        if st_mode == 1:
                             sr_offset -=0.01667
                         if ss_on_mins  < 0:
                             ss_on_hour -= 1
@@ -3764,7 +4116,7 @@ while True:
                                 ss_on_hour = 23
                     elif h == 1 or (h == 1 and event.button == 4):
                         ss_on_mins +=1
-                        if sd_mode == 1:
+                        if st_mode == 1:
                             sr_offset +=0.01667
                         if ss_on_mins > 59:
                             ss_on_mins = 0
@@ -3773,23 +4125,25 @@ while True:
                                 ss_on_hour = 0
                     elif h == 0:
                         ss_on_mins -=1
-                        if sd_mode == 1:
+                        if st_mode == 1:
                             sr_offset -=0.01667
                         if ss_on_mins  < 0:
                             ss_on_hour -= 1
                             ss_on_mins = 59
                             if ss_on_hour < 0:
                                 ss_on_hour = 23
+                    ss_on_time = (ss_on_hour * 60) + ss_on_mins        
+                                
                     if synced == 1:
-                        if sd_mode == 1:
-                            text(0,9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
+                        if st_mode == 1 and on_sunrise == 1:
+                            text(9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
                         else:
-                            text(0,9,3,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
+                            text(9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
                     else:
-                        if sd_mode == 1:
-                            text(0,9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
+                        if st_mode == 1 and on_sunrise == 1:
+                            text(9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:] + " (" + str(sr_offset)[0:4] + ")",14,7)
                         else:
-                            text(0,9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
+                            text(9,0,1,1,("0" + str(ss_on_hour))[-2:] + ":" + ("0" + str(ss_on_mins))[-2:],14,7)
                     save_config = 1
 
                                        
@@ -3797,19 +4151,19 @@ while True:
                     # SHUTDOWN TIME
                     if (h == 1 and event.button == 3) or (h == 0 and event.button == 4):
                         sd_hour +=1
-                        if sd_mode == 1:
+                        if st_mode == 1:
                             ss_offset +=1
                         if sd_hour > 23:
                             sd_hour = 0
                     elif (h == 0 and event.button == 3)  or (h == 0 and event.button == 5):
                         sd_hour -=1
-                        if sd_mode == 1:
+                        if st_mode == 1:
                             ss_offset -=1
                         if sd_hour < 0:
                             sd_hour = 23
                     elif h == 1 and event.button == 5:
                         sd_mins -=1
-                        if sd_mode == 1:
+                        if st_mode == 1:
                             ss_offset -=0.01667
                         if sd_mins  < 0:
                             sd_hour -= 1
@@ -3818,7 +4172,7 @@ while True:
                                 sd_hour = 23
                     elif h == 1 or (h == 1 and event.button == 4):
                         sd_mins +=1
-                        if sd_mode == 1:
+                        if st_mode == 1:
                             ss_offset +=0.01667
                         if sd_mins > 59:
                             sd_mins = 0
@@ -3827,23 +4181,24 @@ while True:
                                 sd_hour = 0
                     elif h == 0:
                         sd_mins -=1
-                        if sd_mode == 1:
+                        if st_mode == 1:
                             ss_offset -=0.01667
                         if sd_mins  < 0:
                             sd_hour -= 1
                             sd_mins = 59
                             if sd_hour < 0:
                                 sd_hour = 23
+                    sd_time = (sd_hour * 60) + sd_mins
                     if synced == 1:
-                        if sd_mode == 1:
-                            text(0,10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
+                        if st_mode == 1:
+                            text(10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
                         else:
-                            text(0,10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
+                            text(10,3,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                     else:
-                        if sd_mode == 1:
-                            text(0,10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
+                        if st_mode == 1:
+                            text(10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:] + " (" + str(ss_offset)[0:4] + ")",14,7)
                         else:
-                            text(0,10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
+                            text(10,0,1,1,("0" + str(sd_hour))[-2:] + ":" + ("0" + str(sd_mins))[-2:],14,7)
                     save_config = 1
                                                             
                                      
@@ -3856,11 +4211,11 @@ while True:
                        show_vid = 0
                    old_show_vid = show_vid
                    if show_vid == 0:
-                       text(0,0,3,1,1,"OFF",14,7)
+                       text(0,3,1,1,"OFF",14,7)
                    else:
-                       text(0,0,3,1,1,"ON",14,7)
+                       text(0,3,1,1,"ON",14,7)
                             
-                  elif g == 1 and show == 1 and (frames > 0 or ram_frames > 0):
+                  elif g == 1 and show == 1 and (frames > 0 or ram_frames > 0) and event.button == 1:
                     # SHOW next still
                     menu_timer  = time.monotonic()
                     if (h == 1 and event.button == 1) or event.button == 4:
@@ -3872,11 +4227,16 @@ while True:
                         if q < 0:
                             q = len(Jpegs)-1
                     if os.path.getsize(Jpegs[q]) > 0:
-                        text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
+                        text(1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
                         if len(Jpegs) > 0:
                             image = pygame.image.load(Jpegs[q])
-                            cropped = pygame.transform.scale(image, (pre_width,pre_height))
+                            if image.get_height() == image.get_width():
+                                cropped = pygame.transform.scale(image, (pre_height,pre_height))
+                            else:
+                                cropped = pygame.transform.scale(image, (pre_width,pre_height))
                             windowSurfaceObj.blit(cropped, (0, 0))
+                            if image.get_height() == image.get_width():
+                                 pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(pre_height,0,pre_width - pre_height,pre_height))
                             duration = 0
                             mp4 = Jpegs[q][:-4] + ".mp4"
                             cap = cv2.VideoCapture(mp4)
@@ -3898,6 +4258,60 @@ while True:
                             windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
                             pygame.display.update()
 
+                  elif g == 2 and ( frames > 0 or ram_frames > 0):
+                    # SHOW ALL STILLS
+                    menu_timer  = time.monotonic()
+                    text(2,2,0,1,"STOP",14,7)
+                    text(2,2,1,1,"     ",14,7)
+                    st = 0
+                    nq = 0
+                    while st == 0:
+                        for q in range (0,len(Jpegs)):
+                            for event in pygame.event.get():
+                                if (event.type == MOUSEBUTTONUP):
+                                    mousex, mousey = event.pos
+                                    if mousex > cwidth:
+                                        buttonx = int(mousey/bh)
+                                        nq = q
+                                        if buttonx == 2:
+                                            st = 1
+                            
+                            if os.path.getsize(Jpegs[q]) > 0 and st == 0:
+                                text(1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
+                                if len(Jpegs) > 0:
+                                    image = pygame.image.load(Jpegs[q])
+                                    if image.get_height() == image.get_width():
+                                        cropped = pygame.transform.scale(image, (pre_height,pre_height))
+                                    else:
+                                        cropped = pygame.transform.scale(image, (pre_width,pre_height))
+                                    windowSurfaceObj.blit(cropped, (0, 0))
+                                    if image.get_height() == image.get_width():
+                                        pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(pre_height,0,pre_width - pre_height,pre_height))
+                                    duration = 0
+                                    mp4 = Jpegs[q][:-4] + ".mp4"
+                                    cap = cv2.VideoCapture(mp4)
+                                    if not cap.isOpened():
+                                        time.sleep(0.1)
+                                    else:
+                                        fpsv = cap.get(cv2.CAP_PROP_FPS)
+                                        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                                        duration = frame_count / fpsv if fpsv else 0
+                                        cap.release()
+                                    fontObj = pygame.font.Font(None, 25)
+                                    msgSurfaceObj = fontObj.render(str(mp4) + " : " + str(int(duration)) + "s", False, (255,255,0))
+                                    msgRectobj = msgSurfaceObj.get_rect()
+                                    msgRectobj.topleft = (10,10)
+                                    windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
+                                    msgSurfaceObj = fontObj.render((str(q+1) + "/" + str(ram_frames + frames) ), False, (255,0,0))
+                                    msgRectobj = msgSurfaceObj.get_rect()
+                                    msgRectobj.topleft = (10,35)
+                                    windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
+                                    pygame.display.update()
+                                    time.sleep(0.5)
+                    text(2,2,0,1,"SHOW ALL",14,7)
+                    text(2,2,1,1,"Stills",14,7)
+                    q = nq - 1
+                    
                   elif g == 3  and show == 1 and len(Jpegs) > 0:
                       #Show Video
                       menu_timer = time.monotonic()
@@ -3931,11 +4345,11 @@ while True:
                         mp4_anno += 1
                         mp4_anno = min(mp4_anno,1)
                     if mp4_anno == 1:
-                        text(0,4,3,1,1,"Yes",14,7)
+                        text(4,3,1,1,"Yes",14,7)
                     else:
-                        text(0,4,3,1,1,"No",14,7)
+                        text(4,3,1,1,"No",14,7)
                         
-                  elif g == 6 and show == 1 and frames + ram_frames > 0 and (frames > 0 or ram_frames > 0) and event.button == 3:
+                  elif (g == 6 or g == 1) and show == 1 and frames + ram_frames > 0 and event.button == 3:
                     # DELETE A VIDEO
                     menu_timer  = time.monotonic()
                     try:
@@ -3966,7 +4380,12 @@ while True:
                     if len(Videos) > 0:
                         try:
                             image = pygame.image.load(Videos[q][:-4] + ".jpg")
-                            cropped = pygame.transform.scale(image, (pre_width,pre_height))
+                            if image.get_height() == image.get_width():
+                                cropped = pygame.transform.scale(image, (pre_height,pre_height))
+                            else:
+                                cropped = pygame.transform.scale(image, (pre_width,pre_height))
+                            if image.get_height() == image.get_width():
+                                pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(pre_height,0,pre_width - pre_height,pre_height))
                             windowSurfaceObj.blit(cropped, (0, 0))
                             duration = 0
                             mp4 = Jpegs[q][:-4] + ".mp4"
@@ -3998,9 +4417,9 @@ while True:
                         main_menu()
                                                  
                     if ram_frames + frames > 0 and menu == 4:
-                        text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
+                        text(1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
                     elif menu == 4:
-                        text(0,1,3,1,1," ",14,7)
+                        text(1,3,1,1," ",14,7)
                     vf = str(ram_frames) + " - " + str(frames)
                     pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,cheight,scr_width-bw,scr_height))
                     oldimg = []
@@ -4015,10 +4434,10 @@ while True:
                     USB_Files  = (os.listdir(m_user))
                     if len(USB_Files) > 0 and frames > 0:
                         pause_thread = True
-                        if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
-                            os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
-                        text(0,8,3,0,1,"MOVING",14,7)
-                        text(0,8,3,1,1,"MP4",14,7)
+                        if not os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/") :
+                            os.system('mkdir ' + m_user + "/" + USB_Files[0] + "/Videos/")
+                        text(8,3,0,1,"MOVING",14,7)
+                        text(8,3,1,1,"MP4",14,7)
                         movi = Videos[q].split("/")
                         if movi[1] == "home":
                             if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
@@ -4029,24 +4448,24 @@ while True:
                         shutil.copy(Videos[q],m_user + "/" + USB_Files[0] + "/Videos/")
                         if os.path.exists(Videos[q][:-4] + ".jpg"):
                             shutil.copy(Videos[q][:-4] + ".jpg",m_user + "/" + USB_Files[0] + "/Pictures/")
-                        #if movi[1] == "home":
-                        #    if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
-                        #        os.remove(Videos[q])
-                        #        if Videos[q][len(Videos[q]) - 5:] == "f.mp4":
-                        #            if os.path.exists(Videos[q][:-5] + ".jpg"):
-                        #                os.remove(Videos[q][:-5] + ".jpg")
-                        #        else:
-                        #            if os.path.exists(Videos[q][:-4] + ".jpg"):
-                        #                os.remove(Videos[q][:-4] + ".jpg")
-                        #elif movi[1] == "run":
-                        #    if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]):
-                        #        os.remove(Videos[q])
-                        #        if Videos[q][len(Videos[q]) - 5:] == "f.mp4":
-                        #            if os.path.exists(Videos[q][:-5] + ".jpg"):
-                        #                os.remove(Videos[q][:-5] + ".jpg")
-                        #        else:
-                        #            if os.path.exists(Videos[q][:-4] + ".jpg"):
-                        #                os.remove(Videos[q][:-4] + ".jpg")
+                        if movi[1] == "home":
+                            if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]) and os.stat(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]).st_size > 0:
+                                os.remove(Videos[q])
+                                if Videos[q][len(Videos[q]) - 5:] == "f.mp4":
+                                    if os.path.exists(Videos[q][:-5] + ".jpg"):
+                                        os.remove(Videos[q][:-5] + ".jpg")
+                                else:
+                                    if os.path.exists(Videos[q][:-4] + ".jpg"):
+                                        os.remove(Videos[q][:-4] + ".jpg")
+                        elif movi[1] == "run":
+                            if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]) and os.stat(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]).st_size > 0:
+                                os.remove(Videos[q])
+                                if Videos[q][len(Videos[q]) - 5:] == "f.mp4":
+                                    if os.path.exists(Videos[q][:-5] + ".jpg"):
+                                        os.remove(Videos[q][:-5] + ".jpg")
+                                else:
+                                    if os.path.exists(Videos[q][:-4] + ".jpg"):
+                                        os.remove(Videos[q][:-4] + ".jpg")
                         Videos = glob.glob(h_user + '/Videos/*.mp4')
                         frames = len(Videos)
                         Rideos = glob.glob('/run/shm/*.mp4')
@@ -4060,16 +4479,21 @@ while True:
                            Jpegs.append(Rpegs[x])
                         Jpegs.sort()
                         frames = len(Videos)
-                        text(0,8,2,0,1,"MOVE MP4",14,7)
-                        text(0,8,2,1,1,"to USB",14,7)
+                        text(8,2,0,1,"MOVE MP4",14,7)
+                        text(8,2,1,1,"to USB",14,7)
                         Videos = glob.glob(h_user + '/Videos/*.mp4')
                         if q > len(Videos)-1:
                             q -=1
                         if len(Videos) > 0:
                             try:
                                 image = pygame.image.load(Videos[q][:-4] + ".jpg")
-                                cropped = pygame.transform.scale(image, (pre_width,pre_height))
+                                if image.get_height() == image.get_width():
+                                    cropped = pygame.transform.scale(image, (pre_height,pre_height))
+                                else:
+                                    cropped = pygame.transform.scale(image, (pre_width,pre_height))
                                 windowSurfaceObj.blit(cropped, (0, 0))
+                                if image.get_height() == image.get_width():
+                                    pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(pre_height,0,pre_width - pre_height,pre_height))
                                 duration = 0
                                 mp4 = Jpegs[q][:-4] + ".mp4"
                                 cap = cv2.VideoCapture(mp4)
@@ -4100,9 +4524,9 @@ while True:
                             main_menu()
                          
                     if ram_frames + frames > 0 and menu == 4:
-                        text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
+                        text(1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
                     elif menu == 4:
-                        text(0,1,3,1,1," ",14,7)
+                        text(1,3,1,1," ",14,7)
                     vf = str(ram_frames) + " - " + str(frames)
                     pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,cheight,scr_width-bw,scr_height))
                     oldimg = []
@@ -4120,16 +4544,19 @@ while True:
                     USB_Files  = (os.listdir(m_user))
                     if len(USB_Files) > 0 and frames > 0:
                         pause_thread = True
-                        if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
-                            os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
-                        text(0,9,3,0,1,"MOVING",14,7)
-                        text(0,9,3,1,1,"MP4s",14,7)
-                        for xx in range(0,len(Videos)):
-                            movi = Videos[xx].split("/")
-                            image = pygame.image.load(Jpegs[xx])
-                            cropped = pygame.transform.scale(image, (pre_width,pre_height))
+                        if not os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/") :
+                            os.system('mkdir ' + m_user + "/" + USB_Files[0] + "/Videos/")
+                        text(9,3,0,1,"MOVING",14,7)
+                        text(9,3,1,1,"MP4s",14,7)
+                        for xxx in range(0,len(Videos)):
+                            movi = Videos[xxx].split("/")
+                            image = pygame.image.load(Jpegs[xxx])
+                            if image.get_height() == image.get_width():
+                                cropped = pygame.transform.scale(image, (pre_height,pre_height))
+                            else:
+                                cropped = pygame.transform.scale(image, (pre_width,pre_height))
                             windowSurfaceObj.blit(cropped, (0, 0))
-                            text(0,1,3,1,1,str(xx+1) + " / " + str(len(Videos)),14,7)
+                            text(1,3,1,1,str(xxx+1) + " / " + str(len(Videos)),14,7)
                             pygame.display.update()
                             if movi[1] == "home":
                                 if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
@@ -4137,41 +4564,41 @@ while True:
                             elif movi[1] == "run":
                                 if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]):
                                     os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3])
-                            shutil.copy(Videos[xx],m_user + "/" + USB_Files[0] + "/Videos/")
-                            if os.path.exists(Videos[xx][:-4] + ".jpg"):
-                                shutil.copy(Videos[xx][:-4] + ".jpg",m_user + "/" + USB_Files[0] + "/Pictures/")
-                            #if movi[1] == "home":
-                            #    if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
-                            #        os.remove(Videos[xx])
-                            #        if Videos[xx][len(Videos[xx]) - 5:] == "f.mp4":
-                            #            if os.path.exists(Videos[xx][:-5] + ".jpg"):
-                            #                os.remove(Videos[xx][:-5] + ".jpg")
-                            #        else:
-                            #            if os.path.exists(Videos[xx][:-4] + ".jpg"):
-                            #                os.remove(Videos[xx][:-4] + ".jpg")
-                            #elif movi[1] == "run":
-                            #    if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]):
-                            #        os.remove(Videos[xx])
-                            #        if Videos[xx][len(Videos[xx]) - 5:] == "f.mp4":
-                            #            if os.path.exists(Videos[xx][:-5] + ".jpg"):
-                            #                os.remove(Videos[xx][:-5] + ".jpg")
-                            #        else:
-                            #            if os.path.exists(Videos[xx][:-4] + ".jpg"):
-                            #                os.remove(Videos[xx][:-4] + ".jpg")
+                            shutil.copy(Videos[xxx],m_user + "/" + USB_Files[0] + "/Videos/")
+                            if os.path.exists(Videos[xxx][:-4] + ".jpg"):
+                                shutil.copy(Videos[xxx][:-4] + ".jpg",m_user + "/" + USB_Files[0] + "/Pictures/")
+                            if movi[1] == "home":
+                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]) and os.stat(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]).st_size > 0:
+                                    os.remove(Videos[xxx])
+                                    if Videos[xxx][len(Videos[xxx]) - 5:] == "f.mp4":
+                                        if os.path.exists(Videos[xxx][:-5] + ".jpg"):
+                                            os.remove(Videos[xxx][:-5] + ".jpg")
+                                    else:
+                                        if os.path.exists(Videos[xxx][:-4] + ".jpg"):
+                                            os.remove(Videos[xxx][:-4] + ".jpg")
+                            elif movi[1] == "run":
+                                if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]) and os.stat(m_user + "/" + USB_Files[0] + "/Videos/" + movi[3]).st_size > 0:
+                                    os.remove(Videos[xxx])
+                                    if Videos[xxx][len(Videos[xxx]) - 5:] == "f.mp4":
+                                        if os.path.exists(Videos[xxx][:-5] + ".jpg"):
+                                            os.remove(Videos[xxx][:-5] + ".jpg")
+                                    else:
+                                        if os.path.exists(Videos[xxx][:-4] + ".jpg"):
+                                            os.remove(Videos[xxx][:-4] + ".jpg")
                         Videos = glob.glob(h_user + '/Videos/*.mp4')
                         Jpegs = glob.glob(h_user + '/Videos/*.jpg')
-                        #for xx in range(0,len(Jpegs)):
-                        #    os.remove(Jpegs[xx])
+                        #for xxx in range(0,len(Jpegs)):
+                        #    os.remove(Jpegs[xxx])
                         frames = len(Videos)
-                        text(0,9,0,0,1,"MOVE MP4s",14,7)
-                        text(0,9,0,1,1,"to USB",14,7)
+                        text(9,0,0,1,"MOVE MP4s",14,7)
+                        text(9,0,1,1,"to USB",14,7)
                     pause_thread = False
                     main_menu()
                           
                   elif g == 10:
                     # DELETE ALL VIDEOS
                     menu_timer  = time.monotonic()
-                    text(0,3,3,1,1," ",14,7)
+                    text(3,3,1,1," ",14,7)
                     if event.button == 3:
                         fontObj = pygame.font.Font(None, 70)
                         msgSurfaceObj = fontObj.render("DELETING....", False, (255,0,0))
@@ -4181,23 +4608,23 @@ while True:
                         pygame.display.update()
                         try:
                             Rpegs = glob.glob('/run/shm/*.jpg')
-                            for xx in range(0,len(Rpegs )):
-                                os.remove(Rpegs[xx])
+                            for xxx in range(0,len(Rpegs )):
+                                os.remove(Rpegs[xxx])
                             Rideos = glob.glob('/run/shm/*.mp4')
-                            for xx in range(0,len(Rideos)):
-                                os.remove(Rideos[xx])
+                            for xxx in range(0,len(Rideos)):
+                                os.remove(Rideos[xxx])
                             ram_frames = 0
                             Jpegs = glob.glob(h_user + '/Videos/*.jpg')
-                            for xx in range(0,len(Jpegs)):
-                                os.remove(Jpegs[xx])
+                            for xxx in range(0,len(Jpegs)):
+                                os.remove(Jpegs[xxx])
                             Videos = glob.glob(h_user + '/Videos/*.mp4')
-                            for xx in range(0,len(Videos)):
-                                os.remove(Videos[xx])
+                            for xxx in range(0,len(Videos)):
+                                os.remove(Videos[xxx])
                             frames = 0
                             vf = str(ram_frames) + " - " + str(frames)
                         except:
                              pass
-                        text(0,1,3,1,1," ",14,7)
+                        text(1,3,1,1," ",14,7)
                         menu = -1
                         Capture = old_cap
                         main_menu()
@@ -4217,55 +4644,6 @@ while True:
                         Jpegs.sort()
                         ram_frames = len(Rideos)
                     
-                  elif g == 2 and ( frames > 0 or ram_frames > 0):
-                    # SHOW ALL STILLS
-                    menu_timer  = time.monotonic()
-                    text(0,2,2,0,1,"STOP",14,7)
-                    text(0,2,2,1,1,"     ",14,7)
-                    st = 0
-                    nq = 0
-                    while st == 0:
-                        for q in range (0,len(Jpegs)):
-                            for event in pygame.event.get():
-                                if (event.type == MOUSEBUTTONUP):
-                                    mousex, mousey = event.pos
-                                    if mousex > cwidth:
-                                        buttonx = int(mousey/bh)
-                                        nq = q
-                                        if buttonx == 2:
-                                            st = 1
-                            
-                            if os.path.getsize(Jpegs[q]) > 0 and st == 0:
-                                text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
-                                if len(Jpegs) > 0:
-                                    image = pygame.image.load(Jpegs[q])
-                                    cropped = pygame.transform.scale(image, (pre_width,pre_height))
-                                    windowSurfaceObj.blit(cropped, (0, 0))
-                                    duration = 0
-                                    mp4 = Jpegs[q][:-4] + ".mp4"
-                                    cap = cv2.VideoCapture(mp4)
-                                    if not cap.isOpened():
-                                        time.sleep(0.1)
-                                    else:
-                                        fpsv = cap.get(cv2.CAP_PROP_FPS)
-                                        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-                                        duration = frame_count / fpsv if fpsv else 0
-                                        cap.release()
-                                    fontObj = pygame.font.Font(None, 25)
-                                    msgSurfaceObj = fontObj.render(str(mp4) + " : " + str(int(duration)) + "s", False, (255,255,0))
-                                    msgRectobj = msgSurfaceObj.get_rect()
-                                    msgRectobj.topleft = (10,10)
-                                    windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
-                                    msgSurfaceObj = fontObj.render((str(q+1) + "/" + str(ram_frames + frames) ), False, (255,0,0))
-                                    msgRectobj = msgSurfaceObj.get_rect()
-                                    msgRectobj.topleft = (10,35)
-                                    windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
-                                    pygame.display.update()
-                                    time.sleep(0.5)
-                    text(0,2,2,0,1,"SHOW ALL",14,7)
-                    text(0,2,2,1,1,"Stills",14,7)
-                    q = nq - 1
-
                   elif g == 7 and show == 1:
                    # MAKE FULL MP4
                     menu_timer  = time.monotonic()
@@ -4281,8 +4659,8 @@ while True:
                         if use_gpio == 1 and fan_ctrl == 1:
                             led_fan.value = 1
                         frame = 0
-                        text(0,7,3,0,1,"MAKING",14,7)
-                        text(0,7,3,1,1,"FULL MP4",14,7)
+                        text(7,3,0,1,"MAKING",14,7)
+                        text(7,3,1,1,"FULL MP4",14,7)
                         pygame.display.update()
                         if os.path.exists('mylist.txt'):
                             os.remove('mylist.txt')
@@ -4295,15 +4673,19 @@ while True:
                                     image = pygame.image.load( h_user + '/Videos/' + Videos[w] + ".jpg")
                                 elif os.path.exists('/run/shm/' + Videos[w] + ".jpg"):
                                     image = pygame.image.load('/run/shm/' + Videos[w] + ".jpg")
-
-                                imageo = pygame.transform.scale(image, (pre_width,pre_height))
+                                if image.get_height() == image.get_width():
+                                    imageo = pygame.transform.scale(image, (pre_height,pre_height))
+                                else:
+                                    imageo = pygame.transform.scale(image, (pre_width,pre_height))
                                 windowSurfaceObj.blit(imageo, (0, 0))
+                                if image.get_height() == image.get_width():
+                                    pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(pre_height,0,pre_width - pre_height,pre_height))
                                 fontObj = pygame.font.Font(None, 25)
                                 msgSurfaceObj = fontObj.render(str(Videos[w] + " " + str(w+1) + "/" + str(len(Videos))), False, (255,0,0))
                                 msgRectobj = msgSurfaceObj.get_rect()
                                 msgRectobj.topleft = (0,10)
                                 windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
-                                text(0,1,3,1,1,str(w+1) + " / " + str(ram_frames + frames),14,7)
+                                text(1,3,1,1,str(w+1) + " / " + str(ram_frames + frames),14,7)
                                 pygame.display.update()
                                 nam = Videos[0].split("/")
                                 outfile = vid_dir + str(nam[len(nam)-1])[:-4] + "f.mp4"
@@ -4327,47 +4709,47 @@ while True:
                             USB_Files  = []
                             USB_Files  = (os.listdir(m_user))
                             if len(USB_Files) > 0:
-                                if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
-                                    os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
-                                text(0,5,3,0,1,"MOVING",14,7)
-                                text(0,5,3,1,1,"MP4s",14,7)
+                                if not os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/") :
+                                    os.system('mkdir ' + m_user + "/" + USB_Files[0] + "/Videos/")
+                                text(5,3,0,1,"MOVING",14,7)
+                                text(5,3,1,1,"MP4s",14,7)
                                 Videos = glob.glob(h_user + '/Videos/*.mp4')
                                 Videos.sort()
-                                for xx in range(0,len(Videos)):
-                                    movi = Videos[xx].split("/")
+                                for xxx in range(0,len(Videos)):
+                                    movi = Videos[xxx].split("/")
                                     if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
                                         os.remove(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4])
-                                    shutil.copy(Videos[xx],m_user + "/" + USB_Files[0] + "/Videos/")
-                                    #if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
-                                    #     os.remove(Videos[xx])
-                                    #     if Videos[xx][len(Videos[xx]) - 5:] == "f.mp4":
-                                    #         if os.path.exists(Videos[xx][:-5] + ".jpg"):
-                                    #             os.remove(Videos[xx][:-5] + ".jpg")
-                                    #     else:
-                                    #         if os.path.exists(Videos[xx][:-4] + ".jpg"):
-                                    #             os.remove(Videos[xx][:-4] + ".jpg")
+                                    shutil.copy(Videos[xxx],m_user + "/" + USB_Files[0] + "/Videos/")
+                                    if os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]) and os.stat(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]).st_size > 0:
+                                         os.remove(Videos[xxx])
+                                         if Videos[xxx][len(Videos[xxx]) - 5:] == "f.mp4":
+                                             if os.path.exists(Videos[xxx][:-5] + ".jpg"):
+                                                 os.remove(Videos[xxx][:-5] + ".jpg")
+                                         else:
+                                             if os.path.exists(Videos[xxx][:-4] + ".jpg"):
+                                                 os.remove(Videos[xxx][:-4] + ".jpg")
                                 Videos = glob.glob(h_user + '/Videos/*.mp4')
                                 frames = len(Videos)
-                                text(0,5,0,0,1,"MOVE MP4s",14,7)
-                                text(0,5,0,1,1,"to USB",14,7)
+                                text(5,0,0,1,"MOVE MP4s",14,7)
+                                text(5,0,1,1,"to USB",14,7)
                        
                         Videos = glob.glob(h_user + '/Videos/*.mp4')
                         USB_Files  = (os.listdir(m_user))
                         Videos.sort()
                         w = 0
-                        text(0,7,2,0,1,"MAKE FULL",14,7)
-                        text(0,7,2,1,1,"MP4",14,7)
-                        text(0,1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
+                        text(7,2,0,1,"MAKE FULL",14,7)
+                        text(7,2,1,1,"MP4",14,7)
+                        text(1,3,1,1,str(q+1) + " / " + str(ram_frames + frames),14,7)
                         USB_Files  = (os.listdir(m_user))
                         if len(USB_Files) > 0:
                             usedusb = os.statvfs(m_user + "/" + USB_Files[0] + "/")
                             USB_storage = ((1 - (usedusb.f_bavail / usedusb.f_blocks)) * 100)
                         if len(USB_Files) > 0 and len(Videos) > 0:
-                            text(0,5,2,0,1,"MOVE MP4s",14,7)
-                            text(0,5,2,1,1,"to USB " + str(int(USB_storage))+"%",14,7)
+                            text(5,2,0,1,"MOVE MP4s",14,7)
+                            text(5,2,1,1,"to USB " + str(int(USB_storage))+"%",14,7)
                         else:
-                            text(0,5,0,0,1,"MOVE MP4s",14,7)
-                            text(0,5,0,1,1,"to USB",14,7)
+                            text(5,0,0,1,"MOVE MP4s",14,7)
+                            text(5,0,1,1,"to USB",14,7)
                         pygame.display.update()
                         Capture = old_cap
                         pause_thread = False
@@ -4387,9 +4769,9 @@ while True:
                         auto_time += 1
                         auto_time = min(auto_time,200)
                     if auto_time > 0:
-                        text(0,1,3,1,1,str(auto_time),14,7)
+                        text(1,3,1,1,str(auto_time),14,7)
                     else:
-                        text(0,1,3,1,1,"OFF",14,7)
+                        text(1,3,1,1,"OFF",14,7)
                     save_config = 1
                     
                   elif g == 2:
@@ -4400,7 +4782,7 @@ while True:
                     else:
                         ram_limit += 10
                         ram_limit = min(ram_limit,int(sfreeram) - 100)
-                    text(0,2,3,1,1,str(int(ram_limit)),14,7)
+                    text(2,3,1,1,str(int(ram_limit)),14,7)
                     save_config = 1
 
                   elif g == 3:
@@ -4411,7 +4793,7 @@ while True:
                     else:
                         SD_limit += 1
                         SD_limit = min(SD_limit,99)
-                    text(0,3,3,1,1,str(int(SD_limit)),14,7)
+                    text(3,3,1,1,str(int(SD_limit)),14,7)
                     save_config = 1
 
                   elif g == 4:
@@ -4423,11 +4805,11 @@ while True:
                         SD_F_Act += 1
                         SD_F_Act = min(SD_F_Act,2)
                     if SD_F_Act == 0:
-                        text(0,4,3,1,1,"STOP",14,7)
+                        text(4,3,1,1,"STOP",14,7)
                     elif SD_F_Act == 1:
-                        text(0,4,3,1,1,"DEL OLD",14,7)
+                        text(4,3,1,1,"DEL OLD",14,7)
                     else:
-                        text(0,4,3,1,1,"To USB",14,7)
+                        text(4,3,1,1,"To USB",14,7)
                     save_config = 1
                     
                   elif g == 5 and use_gpio == 1 and fan_ctrl == 1:
@@ -4438,7 +4820,7 @@ while True:
                     else:
                         check_time += 1
                         check_time = min(check_time,60)
-                    text(0,5,3,1,1,str(check_time),14,7)
+                    text(5,3,1,1,str(check_time),14,7)
                     save_config = 1
                     
                   elif g == 6 and use_gpio == 1 and fan_ctrl == 1:
@@ -4449,7 +4831,7 @@ while True:
                     else:
                         fan_low += 1
                         fan_low = min(fan_low,fan_high - 1)
-                    text(0,6,3,1,1,str(fan_low),14,7)
+                    text(6,3,1,1,str(fan_low),14,7)
                     save_config = 1
 
                   elif g == 7 and use_gpio == 1 and fan_ctrl == 1:
@@ -4460,7 +4842,7 @@ while True:
                     else:
                         fan_high +=1
                         fan_high = min(fan_high,80)
-                    text(0,7,3,1,1,str(fan_high),14,7)
+                    text(7,3,1,1,str(fan_high),14,7)
                     save_config = 1
                     
                   elif g == 8 and use_gpio == 1:
@@ -4469,11 +4851,11 @@ while True:
                     if ES > 2:
                         ES = 0
                     if ES == 0:
-                        text(0,8,3,1,1,"OFF",14,7)
+                        text(8,3,1,1,"OFF",14,7)
                     elif ES == 1:
-                        text(0,8,3,1,1,"Short",14,7)
+                        text(8,3,1,1,"Short",14,7)
                     else:
-                        text(0,8,3,1,1,"Long",14,7)
+                        text(8,3,1,1,"Long",14,7)
                     save_config = 1
                     
                   elif g == 9:
@@ -4482,9 +4864,9 @@ while True:
                     if use_ref > 1:
                         use_ref = 0
                     if use_ref == 0:
-                        text(0,9,3,1,1,"OFF",14,7)
+                        text(9,3,1,1,"OFF",14,7)
                     else:
-                        text(0,9,3,1,1,"ON",14,7)
+                        text(9,3,1,1,"ON",14,7)
                         im = Image.fromarray(crop)
                         im.save("/run/shm/ref.bmp")
                     save_config = 1
@@ -4500,7 +4882,7 @@ while True:
                     else:
                         dspeed +=1
                         dspeed = min(dspeed,100)
-                    text(0,10,3,1,1,str(dspeed),14,7)
+                    text(10,3,1,1,str(dspeed),14,7)
                     save_config = 1
                                       
                   
@@ -4515,7 +4897,7 @@ while True:
                         fps1 -=1
                         fps1 = max(fps1,5)
                     picam2.set_controls({"FrameRate": fps1})
-                    text(0,0,3,1,1,str(fps1),14,7)
+                    text(0,3,1,1,str(fps1),14,7)
                     save_config = 1
                     
                   elif g == 1:
@@ -4530,16 +4912,16 @@ while True:
                         picam2.set_controls({"AeEnable": False})
                         picam2.set_controls({"ExposureTime": sspeed1})
                         if shutters[speed1] < 0:
-                            text(0,2,3,1,1,"1/" + str(abs(shutters[speed1])),14,7)
+                            text(2,3,1,1,"1/" + str(abs(shutters[speed1])),14,7)
                         else:
-                            text(0,2,3,1,1,str(shutters[speed1]),14,7)
+                            text(2,3,1,1,str(shutters[speed1]),14,7)
                         picam2.set_controls({"AnalogueGain": gain1})
                     else:
                         picam2.set_controls({"AeEnable": True})
                         if shutters[speed1] < 0:
-                           text(0,2,0,1,1,"1/" + str(abs(shutters[speed1])),14,7)
+                           text(2,0,1,1,"1/" + str(abs(shutters[speed1])),14,7)
                         else:
-                           text(0,2,0,1,1,str(shutters[speed1]),14,7)
+                           text(2,0,1,1,str(shutters[speed1]),14,7)
                         if mode1 == 1:
                             picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Normal})
                         if mode1 == 2:
@@ -4547,7 +4929,7 @@ while True:
                         if mode1 == 3:
                             picam2.set_controls({"AeExposureMode": controls.AeExposureModeEnum.Long})
                         picam2.set_controls({"AnalogueGain": gain1})
-                    text(0,1,3,1,1,modes[mode1],14,7)
+                    text(1,3,1,1,modes[mode1],14,7)
                     save_config = 1
                     
                   elif g == 2:
@@ -4572,14 +4954,14 @@ while True:
                         picam2.set_controls({"ExposureTime": sspeed1})
                     if mode1 == 0:
                         if shutters[speed1] < 0:
-                            text(0,2,3,1,1,"1/" + str(abs(shutters[speed1])),14,7)
+                            text(2,3,1,1,"1/" + str(abs(shutters[speed1])),14,7)
                         else:
-                            text(0,2,3,1,1,str(shutters[speed1]),14,7)
+                            text(2,3,1,1,str(shutters[speed1]),14,7)
                     else:
                         if shutters[speed1] < 0:
-                            text(0,2,0,1,1,"1/" + str(abs(shutters[speed1])),14,7)
+                            text(2,0,1,1,"1/" + str(abs(shutters[speed1])),14,7)
                         else:
-                            text(0,2,0,1,1,str(shutters[speed1]),14,7)
+                            text(2,0,1,1,str(shutters[speed1]),14,7)
                     save_config = 1
                     
                   elif g == 3:
@@ -4592,9 +4974,9 @@ while True:
                         gain1 = max(gain1,0)
                     picam2.set_controls({"AnalogueGain": gain1})
                     if gain1 > 0:
-                        text(0,3,3,1,1,str(gain1),14,7)
+                        text(3,3,1,1,str(gain1),14,7)
                     else:
-                        text(0,3,3,1,1,"Auto",14,7)
+                        text(3,3,1,1,"Auto",14,7)
                     save_config = 1
                     
                   elif g == 4:
@@ -4606,7 +4988,7 @@ while True:
                         brightness1 -=1
                         brightness1 = max(brightness1,0)
                     picam2.set_controls({"Brightness": brightness1/10})
-                    text(0,4,3,1,1,str(brightness1),14,7)
+                    text(4,3,1,1,str(brightness1),14,7)
                     save_config = 1
                     
                   elif g == 5:
@@ -4618,7 +5000,7 @@ while True:
                         contrast1 -=1
                         contrast1 = max(contrast1,0)
                     picam2.set_controls({"Contrast": contrast1/10})
-                    text(0,5,3,1,1,str(contrast1),14,7)
+                    text(5,3,1,1,str(contrast1),14,7)
                     save_config = 1
 
                   elif g == 6:
@@ -4630,8 +5012,8 @@ while True:
                         ev1 -=1
                         ev1 = max(ev1,-20)
                     picam2.set_controls({"ExposureValue": ev1/10})
-                    text(0,6,5,0,1,"eV",14,7)
-                    text(0,6,3,1,1,str(ev1),14,7)
+                    text(6,5,0,1,"eV",14,7)
+                    text(6,3,1,1,str(ev1),14,7)
                     save_config = 1
                     
                   elif g == 7:
@@ -4648,7 +5030,7 @@ while True:
                         picam2.set_controls({"AeMeteringMode": controls.AeMeteringModeEnum.Spot})
                     elif meter1 == 2:
                         picam2.set_controls({"AeMeteringMode": controls.AeMeteringModeEnum.Matrix})
-                    text(0,7,3,1,1,str(meters[meter1]),14,7)
+                    text(7,3,1,1,str(meters[meter1]),14,7)
                     save_config = 1
 
                   elif g == 8:
@@ -4660,7 +5042,7 @@ while True:
                         sharpness1 -=1
                         sharpness1 = max(sharpness1,0)
                     picam2.set_controls({"Sharpness": sharpness1})
-                    text(0,8,3,1,1,str(sharpness1),14,7)
+                    text(8,3,1,1,str(sharpness1),14,7)
                     save_config = 1
                 
                   elif g == 9 and Pi_Cam != 11:
@@ -4672,26 +5054,43 @@ while True:
                         saturation1 -=1
                         saturation1 = max(saturation1,0)
                     picam2.set_controls({"Saturation": saturation1/10})
-                    text(0,9,3,1,1,str(saturation1),14,7)
+                    text(9,3,1,1,str(saturation1),14,7)
                     save_config = 1
                     
                   elif g == 10:
-                      # ZOOM
-                      if (h == 1 and event.button == 1) or event.button == 4:
+                      if Pi == 5:
+                          if (h == 1 and event.button == 1) or event.button == 4:
+                              HDRnight1 +=1
+                              HDRnight1 = min(HDRnight1,1)
+                          else:
+                              HDRnight1 -=1
+                              HDRnight1 = max(HDRnight1,0)
+                          if HDRnight1 == 1:
+                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
+                              text(10,3,1,1,"ON",14,7)
+                          else:
+                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.Off})
+                              text(10,3,1,1,"OFF",14,7)
+                          save_config = 1
+                      else:
+                        # ZOOM
+                        if (h == 1 and event.button == 1) or event.button == 4:
                           zoom +=1
                           zoom = min(zoom,9)
-                      else:
+                        else:
                           zoom -=1
                           zoom = max(zoom,0)
-                      if zoom > 0:
-                          button(0,10,1)
-                          text(0,10,1,0,1,"Zoom",14,0)
-                          text(0,10,1,1,1,str(zoom),14,0)
-                      else:
+                        if zoom > 0:
+                          button(10,1)
+                          text(10,1,0,1,"Zoom",14,0)
+                          text(10,1,1,1,str(zoom),14,0)
+                        else:
                           zoom = 0
-                          button(0,10,0)
-                          text(0,10,2,0,1,"Zoom",14,7)
+                          button(10,0)
+                          text(10,2,0,1,"Zoom",14,7)
                           preview = 0
+                          xx = 0
+                          yy = 0
                     
 # MENU 7 === CAMERA 2 - 2=================================================================================================
                 elif menu == 7:
@@ -4703,28 +5102,30 @@ while True:
                     else:
                         IRF1 -=1
                         IRF1 = max(IRF1,0)
-                    text(0,0,3,1,1,IR_filters[IRF1],14,7)
+                    text(0,3,1,1,IR_filters[IRF1],14,7)
                     if IRF1 == 2:
                         IRF_on1 = 0
-                        led_sw_ir1.off()
-                        led_ir_light.on()
-                        text(0,0,2,0,1,"IR Filter (OFF)",14,7)
+                        if use_gpio == 1:
+                            led_sw_ir1.off()
+                            led_ir_light.on()
+                        text(0,2,0,1,"IR Filter (OFF)",14,7)
                     elif IRF1 == 3:
                         IRF_on1 = 1
-                        led_sw_ir1.on()
-                        if IRF_on == 1:
+                        if use_gpio == 1:
+                            led_sw_ir1.on()
+                        if IRF_on == 1 and use_gpio == 1:
                             led_ir_light.off()
-                        text(0,0,1,0,1,"IR Filter (ON)",14,7)
-                    if IRF1 == 0:
+                        text(0,1,0,1,"IR Filter (ON)",14,7)
+                    if IRF1 == 0 and st_mode == 1:
                         suntimes()
                     if synced == 1 and IRF1 == 0:
-                        text(0,1,2,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
+                        text(1,2,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
                     elif IRF1 == 0:
-                        text(0,1,0,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
+                        text(1,0,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
                     if synced == 1 and IRF1 == 0: 
-                        text(0,2,2,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)               
+                        text(2,2,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)               
                     elif IRF1 == 0:
-                        text(0,2,2,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
+                        text(2,2,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
                     save_config = 1
                     
                   if g == 1 and IRF1 == 1:
@@ -4753,7 +5154,7 @@ while True:
                             ir_on_mins1 = 59
                             if ir_on_hour1 < 0:
                                 ir_on_hour1 = 23
-                    text(0,1,3,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
+                    text(1,3,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
                     ir_on_time1 = (ir_on_hour1 * 60) + ir_on_mins1
                     ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
                     if ir_on_time1 >= ir_of_time1:
@@ -4764,7 +5165,7 @@ while True:
                             ir_of_hour1 += 1
                             if ir_of_hour1 > 23:
                                 ir_of_hour1 = 0
-                    text(0,2,3,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
+                    text(2,3,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
                     ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
                     save_config = 1
 
@@ -4794,7 +5195,7 @@ while True:
                             ir_of_mins1 = 59
                             if ir_of_hour1 < 0:
                                 ir_of_hour1 = 23
-                    text(0,2,3,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
+                    text(2,3,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
                     ir_on_time1 = (ir_on_hour1 * 60) + ir_on_mins1
                     ir_of_time1 = (ir_of_hour1 * 60) + ir_of_mins1
                     if ir_of_time1 <= ir_on_time1:
@@ -4805,7 +5206,7 @@ while True:
                             ir_on_mins1 = 59
                             if ir_on_hour1 < 0:
                                 ir_on_hour1 = 23
-                    text(0,1,3,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
+                    text(1,3,1,1,("0" + str(ir_on_hour1))[-2:] + ":" + ("0" + str(ir_on_mins1))[-2:],14,7)
                      
                     ir_on_time = (ir_on_hour1 * 60) + ir_on_mins1
                     save_config = 1
@@ -4821,39 +5222,39 @@ while True:
                         AF_f_mode1 +=1
                         AF_f_mode1 = min(AF_f_mode1,2)
                     if AF_f_mode1 == 0:
-                        AF_f_spot = 0
+                        AF_f_spot1 = 0
                         fxx = 0
                         fxy = 0
                         fxz = 1
                         picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
                     elif AF_f_mode1 == 1:
-                        AF_f_spot = 0
+                        AF_f_spot1 = 0
                         fxx = 0
                         fxy = 0
                         fxz = 1
                         picam2.set_controls({"AfMode": controls.AfModeEnum.Auto, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))]})
                         picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
                     elif AF_f_mode1 == 2:
-                        AF_f_spot = 0
+                        AF_f_spot1 = 0
                         fxx = 0
                         fxy = 0
                         fxz = 1
                         picam2.set_controls( {"AfMode" : controls.AfModeEnum.Continuous, "AfMetering" : controls.AfMeteringEnum.Windows,  "AfWindows" : [(int(vid_width* .33),int(vid_height*.33),int(vid_width * .66),int(vid_height*.66))] } )
                         picam2.set_controls({"AfTrigger": controls.AfTriggerEnum.Start})
-                    text(0,4,3,1,1,AF_f_modes[AF_f_mode1],14,7)
+                    text(4,3,1,1,AF_f_modes[AF_f_mode1],14,7)
                     if AF_f_mode1 == 0:
                         picam2.set_controls({"LensPosition": AF_focus1})
-                        text(0,5,2,0,1,"Focus Manual",14,7)
+                        text(5,2,0,1,"Focus Manual",14,7)
                         if Pi_Cam == 3:
                             if AF_focus == 0:
                                 AF_focus = 0.01
                             fd = 1/(AF_focus1)
-                            text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
+                            text(5,3,1,1,str(fd)[0:5] + "m",14,7)
                         else:
-                            text(0,5,3,1,1,str(int(101-(AF_focus1 * 10))),14,7)
+                            text(5,3,1,1,str(int(101-(AF_focus1 * 10))),14,7)
                     else:
-                        text(0,5,3,0,1," ",14,7)
-                        text(0,5,3,1,1," ",14,7)
+                        text(5,3,0,1," ",14,7)
+                        text(5,3,1,1," ",14,7)
                     fxx = 0
                     fxy = 0
                     fxz = 1
@@ -4876,13 +5277,13 @@ while True:
                     AF_focus1 = min(AF_focus1,10)
                     picam2.set_controls({"LensPosition": AF_focus1})
                     if AF_focus1 == 0:
-                        text(0,1,3,1,1,"Inf",14,7)
+                        text(1,3,1,1,"Inf",14,7)
                     else:
                         if Pi_Cam == 3:
                             fd = 1/(AF_focus1)
-                            text(0,5,3,1,1,str(fd)[0:5] + "m",14,7)
+                            text(5,3,1,1,str(fd)[0:5] + "m",14,7)
                         else:
-                            text(0,5,3,1,1,str(int(101-(AF_focus1 * 10))),14,7)
+                            text(5,3,1,1,str(int(101-(AF_focus1 * 10))),14,7)
                     save_config = 1
                                  
                   elif g == 6 and Pi_Cam != 11:
@@ -4909,13 +5310,13 @@ while True:
                         picam2.set_controls({"AwbEnable": True,"AwbMode": controls.AwbModeEnum.Custom})
                         cg = (red1,blue1)
                         picam2.set_controls({"AwbEnable": False,"ColourGains": cg})
-                    text(0,6,3,1,1,str(awbs[awb1]),14,7)
+                    text(6,3,1,1,str(awbs[awb1]),14,7)
                     if awb1 == 6:
-                        text(0,7,3,1,1,str(red1)[0:3],14,7)
-                        text(0,8,3,1,1,str(blue1)[0:3],14,7)
+                        text(7,3,1,1,str(red1)[0:3],14,7)
+                        text(8,3,1,1,str(blue1)[0:3],14,7)
                     else:
-                        text(0,7,0,1,1,str(red1)[0:3],14,7)
-                        text(0,8,0,1,1,str(blue1)[0:3],14,7)
+                        text(7,0,1,1,str(red1)[0:3],14,7)
+                        text(8,0,1,1,str(blue1)[0:3],14,7)
                     save_config = 1
                     
                   elif g == 7 and awb1 == 6 and Pi_Cam != 11:
@@ -4928,7 +5329,7 @@ while True:
                         red1 = min(red1,8)
                     cg = (red1,blue1)
                     picam2.set_controls({"ColourGains": cg})
-                    text(0,7,3,1,1,str(red1)[0:3],14,7)
+                    text(7,3,1,1,str(red1)[0:3],14,7)
                     save_config = 1
                     
                   elif g == 8 and awb1 == 6 and Pi_Cam != 11:
@@ -4941,7 +5342,7 @@ while True:
                         blue1 = min(blue1,8)
                     cg = (red1,blue1)
                     picam2.set_controls({"ColourGains": cg})
-                    text(0,8,3,1,1,str(blue1)[0:3],14,7)
+                    text(8,3,1,1,str(blue1)[0:3],14,7)
                     save_config = 1
                    
                   elif g == 9:
@@ -4959,26 +5360,30 @@ while True:
                     elif denoise1 == 2:
                         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
 
-                    text(0,9,3,1,1,str(denoises[denoise1]),14,7)
+                    text(9,3,1,1,str(denoises[denoise1]),14,7)
                     save_config = 1
                     
-                  elif g == 10:
-                      # ZOOM
+                  elif g == 10 and Pi_Cam != 8:
+                      # CROP MODE
                       if (h == 1 and event.button == 1) or event.button == 4:
-                          zoom +=1
-                          zoom = min(zoom,9)
+                          sensor_crop1 +=1
+                          sensor_crop1 = min(sensor_crop1,2)
                       else:
-                          zoom -=1
-                          zoom = max(zoom,0)
-                      if zoom > 0:
-                          button(0,10,1)
-                          text(0,10,1,0,1,"Zoom",14,0)
-                          text(0,10,1,1,1,str(zoom),14,0)
-                      else:
-                          zoom = 0
-                          button(0,10,0)
-                          text(0,10,2,0,1,"Zoom",14,7)
-                          preview = 0
+                          sensor_crop1 -=1
+                          sensor_crop1 = max(sensor_crop1,0)
+                      text(10,2,0,1,"Crop Mode",14,7)
+                      text(10,3,1,1,str(sensor_crop1),14,7)
+                      picam2.stop_recording()
+                      pref = pre_frames * 1000
+                      circular = CircularOutput2(buffer_duration_ms=pref)
+                      # stop circular buffer
+                      picam2.close()
+                      picam2.stop()
+                      Camera_Version()
+                      # restart circular buffer
+                      start_buffer()
+                      set_parameters1()
+                      save_config = 1
                         
             # save config if changed
             if save_config == 1:
@@ -5042,9 +5447,9 @@ while True:
                 config[57] = saturation1
                 config[58] = fps1 
                 config[59] = AF_f_mode1 
-                config[60] = int(AF_focus1)
+                config[60] = int(AF_focus1*1000)
                 config[61] = AF_f_mode 
-                config[62] = int(AF_focus)
+                config[62] = int(AF_focus*1000)
                 config[63] = IRF_on
                 config[64] = on_hour
                 config[65] = of_hour
@@ -5064,13 +5469,19 @@ while True:
                 config[79] = IRF1
                 config[80] = IRF_on1
                 config[81] = use_buzz
-                config[82] = sd_mode
+                config[82] = st_mode
                 config[83] = sd_mins
                 config[84] = int((sr_offset * 100) + 1200)
                 config[85] = int((ss_offset * 100) + 1200)
                 config[86] = m_alpha 
                 config[87] = use_ref
-              
+                config[88] = bitrate
+                config[89] = ss_on_hour
+                config[90] = ss_on_mins
+                config[91] = sensor_crop0
+                config[92] = sensor_crop1
+                config[93] = HDRnight
+                config[94] = HDRnight1
                 with open(config_file, 'w') as f:
                     for item in config:
                         f.write("%s\n" % item)
