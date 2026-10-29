@@ -14,7 +14,7 @@ The waveshare imx290-83 IR filter can be switched (camera 1 connected to gpio26,
 
 On a Pi5 allows switching of cameras based on sunrise/sunset or set times.
 
-It will capture videos at 30fps at 1920 x 1080, or on a GS camera 1456 x 1088.
+It will capture videos at 25fps at 1920 x 1080, or on a GS camera 1456 x 1088.
 
 lt also captures frames before the trigger frame, default is 2 seconds but user settable.
 
