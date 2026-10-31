@@ -18,10 +18,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.78"
+version = "1.79"
 
 import time
-import cv2
+import cv2   #(sudo apt install python3-opencv)
+import ephem #(sudo pip install ephem)
 import numpy as np
 import pygame
 from pygame.locals import *
@@ -49,7 +50,7 @@ your_long     = '-1.10' # set your location longtitude
 your_elev     = 100     # set your location height in metres
 UTC_offset    = 0       # set your local time offset to UTC in hours, 1.5 = 1hr 30mins
 auto_offset   = 1       # set UTC offset automatically, set = 1
-st_mode       = 1       # SUN times Mode,   0 = set times, 1 = use suntimes (sudo pip install ephem)*
+st_mode       = 0       # SUN times Mode,   0 = set times, 1 = use suntimes to start recording and shutdown *
 sd_hour       = 0       # Shutdown Hour,    0 - 23, 00:00 will NOT SHUTDOWN *
 sd_mins       = 0       # Shutdown Minutes, 0 - 59, 00:00 will NOT SHUTDOWN *
 on_sunrise    = 1       # set to 1 to only enable capturing at sunrise / set time, set to 0 to enable capturing at boot.
@@ -193,7 +194,7 @@ auto_save   = 1       # set to 1 to automatically copy to SD card
 auto_time   = 10      # time after which auto save actioned, 0 = OFF *
 ram_limit   = 150     # MBytes, copy from RAM to SD card when reached *
 check_time  = 10      # fan sampling time in seconds *
-UTC_timer   = 300     # check UTC offset timer
+UTC_timer   = 300     # check UTC offset timer in seconds
 fan_low     = 65      # fan OFF below this, 25% to 100% pwm above this *
 fan_high    = 78      # fan 100% pwm above this *
 on_hour     = 0       # Switch Camera 1 to 2 Hour, 1 - 23, 0 will NOT SWITCH *
@@ -475,15 +476,10 @@ elif camera_sw == 2:
     camera = 0
     old_camera = camera
     
-if st_mode == 1:
-    import ephem #(sudo pip install ephem)
-    you = ephem.Observer()
-    you.lat       = your_lat
-    you.lon       = your_long
-    you.elevation = your_elev
-    ep = 1
-else:
-    ep = 0
+you           = ephem.Observer()
+you.lat       = your_lat
+you.lon       = your_long
+you.elevation = your_elev
     
 old_sd_mins = sd_mins
 old_sd_hour = sd_hour
@@ -4064,8 +4060,8 @@ while True:
                         st_mode -=1
                         if st_mode  < 0:
                             st_mode = 1
-                    if ep == 0:
-                        st_mode = 0
+                    #if ep == 0:
+                    #    st_mode = 0
                     if st_mode == 0:
                         text(8,3,1,1,"SD_Set",14,7)
                         sd_mins = old_sd_mins
