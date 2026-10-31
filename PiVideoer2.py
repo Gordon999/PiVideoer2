@@ -18,7 +18,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE."""
 
 # Version
-version = "1.76"
+version = "1.78"
 
 import time
 import cv2
@@ -110,78 +110,78 @@ det_high    = 100     # max % of pixels detected to trigger, in %  *
 col_filter  = 3       # 3 = FULL, (SEE COL_FILTERS below)*
 nr          = 2       # Detection Noise reduction, 0 off, 1 low, 2 high *
 pre_frames  = 5       # seconds *
+v_length    = 20000   # video length in mS *
+bitrate     = 8       # video bitrate MB *
 dspeed      = 100     # detection speed 1-100, 1 = slowest *
 mp4_fps     = 25      # set MP4 fps *
 mp4_anno    = 1       # mp4_annotate MP4s with date and time , 1 = yes, 0 = no *
 SD_F_Act    = 0       # Action on SD FULL, 0 = STOP, 1 = DELETE OLDEST VIDEO, 2 = COPY TO USB (if fitted) *
 interval    = 0       # seconds of wait between capturing Pictures / for TIMELAPSE set interval and set threshold to 0*
-v_length    = 10000   # video length in mS *
-bitrate     = 8       # video bitrate MB *
 use_ref     = 0       # use reference image, 0 = NO, 1 = YES *
 
 # setup for 1st camera
-mode         = 1       # set camera mode (see modes below) *
-speed        = 18      # set manual shutter , in shutters list *
-gain         = 0       # set gain , 0 = AUTO *
-brightness   = 0       # set camera brightness *
-contrast     = 7       # set camera contrast *
-awb          = 0       # auto white balance, 0 = AUTO (see awbs below) *
-red          = 1.5     # red balance *
-blue         = 1.5     # blue balance *
-meter        = 0       # metering (see meters below)*
-ev           = -4      # eV *
-denoise      = 0       # denoise level (see denoises below)*
-quality      = 90      # video quality 
-sharpness    = 4       # sharpness *
-saturation   = 10      # saturation *
-fps          = 25      # camera fps
-AF_f_mode    = 1       # AF camera focus mode (see AF_f_modes below)*
-AF_f_spot    = 0       # AF spot mode *
-AF_focus     = 1.000   # AF camera manual focus default, in meters *
-IRF          = 0       # Waveshare IR Filter switch MODE *
-IRF_on       = 0       # Waveshare IR Filter switch ON/OFF *
-ir_on_hour   = 20      # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
-ir_of_hour   = 7       # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
-ir_on_mins   = 0       # Switch IR Filter ON mins, 0 - 59 *
-ir_of_mins   = 0       # Switch IR Filter OFF mins, 0 - 59 *
-sensor_crop0 = 0       # 0 = OFF, 1 to 5 dependent on camera *
-auto_mode0   = 0       # 1 = ON, 0 = OFF, this will set the highest sensor mode listed if sensor_crop = 1
-sensor_mode0 = 3       # use 'rpicam-vid --list-cameras' to see available modes for the sensor in use. eg. 3 for HQ camera 4056x2160 10bit
-sw_crop0     = 1920    # sensor crop width (HD = 1920 x 1080, 2k = 2560 x 1440, 4k = 3840 x 2160)
-sh_crop0     = 1080    # sensor crop height
-HDRnight     = 0
+mode         = 1      # set camera mode (see modes below) *
+speed        = 18     # set manual shutter , in shutters list *
+gain         = 0      # set gain , 0 = AUTO *
+brightness   = 0      # set camera brightness *
+contrast     = 7      # set camera contrast *
+awb          = 0      # auto white balance, 0 = AUTO (see awbs below) *
+red          = 1.5    # red balance *
+blue         = 1.5    # blue balance *
+meter        = 0      # metering (see meters below)*
+ev           = -4     # eV *
+denoise      = 0      # denoise level (see denoises below)*
+quality      = 90     # video quality 
+sharpness    = 4      # sharpness *
+saturation   = 10     # saturation *
+fps          = 25     # camera fps
+AF_f_mode    = 1      # AF camera focus mode (see AF_f_modes below)*
+AF_f_spot    = 0      # AF spot mode *
+AF_focus     = 1.000  # AF camera manual focus default, in meters *
+IRF          = 0      # Waveshare IR Filter switch MODE *
+IRF_on       = 0      # Waveshare IR Filter switch ON/OFF *
+ir_on_hour   = 20     # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
+ir_of_hour   = 7      # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
+ir_on_mins   = 0      # Switch IR Filter ON mins, 0 - 59 *
+ir_of_mins   = 0      # Switch IR Filter OFF mins, 0 - 59 *
+sensor_crop0 = 0      # 0 = OFF, 1 to 5 dependent on camera *
+auto_mode0   = 0      # 1 = ON, 0 = OFF, this will set the highest sensor mode listed if sensor_crop = 1
+sensor_mode0 = 3      # use 'rpicam-vid --list-cameras' to see available modes for the sensor in use. eg. 3 for HQ camera 4056x2160 10bit
+sw_crop0     = 1920   # sensor crop width (HD = 1920 x 1080, 2k = 2560 x 1440, 4k = 3840 x 2160)
+sh_crop0     = 1080   # sensor crop height
+hdr          = 0
 
 # setup for 2nd camera (Pi5 ONLY)
-mode1        = 1       # set camera mode *
-speed1       = 18      # set manual shutter , in shutters list *
-gain1        = 0       # set gain , 0 = AUTO *
-brightness1  = 0       # set camera brightness *
-contrast1    = 7       # set camera contrast *
-awb1         = 0       # auto white balance, 0 = AUTO *
-red1         = 1.5     # red balance *
-blue1        = 1.5     # blue balance *
-meter1       = 0       # metering *
-ev1          = -4      # eV *
-denoise1     = 0       # denoise level *
-quality1     = 90      # video quality 
-sharpness1   = 4       # sharpness *
-saturation1  = 10      # saturation *
-fps1         = 25      # camera fps *
-AF_f_mode1   = 1       # AF camera focus mode *
-AF_f_spot1   = 0       # AF spot mode *
-AF_focus1    = 1.000   # AF camera manual focus default, in meters *
-IRF1         = 0       # Waveshare IR Filter switch MODE *
-IRF_on1      = 0       # Waveshare IR Filter switch ON/OFF *
-ir_on_hour1  = 20      # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
-ir_of_hour1  = 7       # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
-ir_on_mins1  = 0       # Switch IR Filter ON mins, 0 - 59 *
-ir_of_mins1  = 0       # Switch IR Filter OFF mins, 0 - 59 *
-sensor_crop1 = 0       # 1 = ON, 0 = OFF
-auto_mode1   = 0       # 1 = ON, 0 = OFF, this will set the highest sensor mode listed if sensor_crop = 1
-sensor_mode1 = 0       # use 'rpicam-vid --list-cameras' to see available modes for the sensor in use.
-sw_crop1     = 1456    # sensor crop width
-sh_crop1     = 1088    # sensor crop height
-HDRnight1    = 0
+mode1        = 1      # set camera mode *
+speed1       = 18     # set manual shutter , in shutters list *
+gain1        = 0      # set gain , 0 = AUTO *
+brightness1  = 0      # set camera brightness *
+contrast1    = 7      # set camera contrast *
+awb1         = 0      # auto white balance, 0 = AUTO *
+red1         = 1.5    # red balance *
+blue1        = 1.5    # blue balance *
+meter1       = 0      # metering *
+ev1          = -4     # eV *
+denoise1     = 0      # denoise level *
+quality1     = 90     # video quality 
+sharpness1   = 4      # sharpness *
+saturation1  = 10     # saturation *
+fps1         = 25     # camera fps *
+AF_f_mode1   = 1      # AF camera focus mode *
+AF_f_spot1   = 0      # AF spot mode *
+AF_focus1    = 1.000  # AF camera manual focus default, in meters *
+IRF1         = 0      # Waveshare IR Filter switch MODE *
+IRF_on1      = 0      # Waveshare IR Filter switch ON/OFF *
+ir_on_hour1  = 20     # Switch IR Filter ON Hour, 1 - 23, 0 will NOT SWITCH *
+ir_of_hour1  = 7      # Switch IR Filter OFF Hour, 1 - 23, 0 will NOT SWITCH *
+ir_on_mins1  = 0      # Switch IR Filter ON mins, 0 - 59 *
+ir_of_mins1  = 0      # Switch IR Filter OFF mins, 0 - 59 *
+sensor_crop1 = 0      # 1 = ON, 0 = OFF
+auto_mode1   = 0      # 1 = ON, 0 = OFF, this will set the highest sensor mode listed if sensor_crop = 1
+sensor_mode1 = 0      # use 'rpicam-vid --list-cameras' to see available modes for the sensor in use.
+sw_crop1     = 1456   # sensor crop width
+sh_crop1     = 1088   # sensor crop height
+hdr1         = 0
 
 #===========================================================================================
 Capture     = 1       # CAPTURE AT BOOT , 0 = off, 1 = ON *
@@ -210,7 +210,7 @@ max_vlen    = 120     # MAX video length in seconds (only used by use_ref)
 # * adjustable whilst running
 
 # initialise parameters
-config_file  = "PiV2config069.txt"
+config_file  = "PiV2config177.txt"
 pre_width    = int((scr_width/8)*7)
 pre_height   = scr_height
 old_camera   = camera
@@ -305,6 +305,7 @@ shutters      = [-4000,-2000,-1600,-1250,-1000,-800,-640,-500,-400,-320,-288,-25
                 -50,-48,-40,-30,-25,-20,-15,-13,-10,-8,-6,-5,-4,-3,0.4,0.5,0.6,0.8,1]
 IR_filters    = ['Auto','Set Times','OFF','ON']
 camera_sws    = ['Auto','Set Times','ONE','TWO']
+hdrs          = ['Off','SingleEx','MultiEx','Night'] # Pi5 ONLY
 
 #check linux version.
 lv = os.popen("cat /etc/os-release").read()
@@ -313,7 +314,7 @@ for w in range(0,len(lva)):
     if lva[w][0:16] == "VERSION_CODENAME":
         lvers = lva[w].split("=")
         lver = lvers[1][0:6]
-print(lver)
+print("Linux: ",lver)
 
 # check pi model
 Pi = -1
@@ -355,7 +356,7 @@ if not os.path.exists(config_file):
               mode1,speed1,gain1,brightness1,contrast1,awb1,int(red1*10),int(blue1*10),meter1,ev1,denoise1,quality1,sharpness1,saturation1,
               fps1,AF_f_mode1,int(AF_focus1 * 1000),AF_f_mode,int(AF_focus *1000),IRF_on,on_hour,of_hour,on_mins,of_mins,ir_on_hour,ir_of_hour,ir_on_mins,ir_of_mins,
               camera_sw,AF_f_spot,AF_f_spot1,ir_on_hour1,ir_of_hour1,ir_on_mins1,ir_of_mins1,IRF1,IRF_on1,use_buzz,st_mode,sd_mins,
-              int((sr_offset * 100) + 1200),int((ss_offset * 100) + 1200),m_alpha,use_ref,bitrate,ss_on_hour,ss_on_mins,sensor_crop0,sensor_crop1,HDRnight,HDRnight1]
+              int((sr_offset * 100) + 1200),int((ss_offset * 100) + 1200),m_alpha,use_ref,bitrate,ss_on_hour,ss_on_mins,sensor_crop0,sensor_crop1,hdr,hdr1]
     with open(config_file, 'w') as f:
         for item in defaults:
             f.write("%s\n" % item)
@@ -462,8 +463,8 @@ ss_on_hour  = config[89]
 ss_on_mins  = config[90]
 sensor_crop0 = config[91] 
 sensor_crop1 = config[92] 
-HDRnight     = config[93]
-HDRnight1    = config[94]
+hdr     = config[93]
+hdr1    = config[94]
 
 bitrate2    = bitrate * 1000000
 
@@ -592,6 +593,7 @@ def suntimes():
             sd_hour += 24
         sd_time = (sd_hour * 60) + sd_mins
     
+    # IR filter 0
     if IRF == 0:
         ir_on_hour = int(time1a[0]) + int(UTC_offset_hr)
         ir_on_mins = int(time1a[1]) + int(UTC_offset_mn * 60)
@@ -606,7 +608,7 @@ def suntimes():
         if ir_on_hour < 0:
             ir_on_hour += 24
         ir_of_hour = int(time2a[0]) + int(UTC_offset_hr)
-        ir_of_mins  = int(time2a[1]) + int(UTC_offset_mn * 60)
+        ir_of_mins = int(time2a[1]) + int(UTC_offset_mn * 60)
         if ir_of_mins > 59:
             ir_of_mins -= 60
             ir_of_hour += 1
@@ -628,7 +630,8 @@ def suntimes():
               text(2,2,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
           else:
               text(2,0,1,1,("0" + str(ir_of_hour))[-2:] + ":" + ("0" + str(ir_of_mins))[-2:],14,7)
-
+    
+    # IR filter 1
     if IRF1 == 0:
         ir_on_hour1 = int(time1a[0]) + int(UTC_offset_hr)
         ir_on_mins1 = int(time1a[1]) + int(UTC_offset_mn * 60)
@@ -665,7 +668,8 @@ def suntimes():
               text(2,2,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
           else:
               text(2,0,1,1,("0" + str(ir_of_hour1))[-2:] + ":" + ("0" + str(ir_of_mins1))[-2:],14,7)
-                
+    
+    # camera switch if AUTO            
     if camera_sw == 0:
         on_hour = int(time1a[0]) + int(UTC_offset_hr)
         on_mins = int(time1a[1]) + int(UTC_offset_mn * 60)
@@ -706,7 +710,7 @@ def suntimes():
                 text(7,2,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
             else:
                 text(7,0,1,1,("0" + str(of_hour))[-2:] + ":" + ("0" + str(of_mins))[-2:],14,7)
-print(st_mode)               
+               
 if st_mode == 1:
     suntimes()
 ss_on_time = (ss_on_hour * 60) + ss_on_mins
@@ -898,9 +902,15 @@ def Camera_Version():
       sys.exit()
   pygame.display.set_caption('PiVideoer2 v:' + str(version) + ' Camera: ' + cameras[Pi_Cam] + ' : ' + str(camera + 1))
   if camera == 0 and menu == 2:
-	  text(10,3,1,1,str(sensor_crop0) + ": " + str(vid_width) + "x" + str(vid_height),13,7)
+      if sensor_crop0 != 0:
+	      text(10,3,1,1,str(sensor_crop0) + ": " + str(vid_width) + "x" + str(vid_height),13,7)
+      else:
+          text(10,3,1,1,"OFF: " + str(vid_width) + "x" + str(vid_height),13,7)
   elif camera == 1 and menu == 7:
-	  text(10,3,1,1,str(sensor_crop1) + ": " + str(vid_width) + "x" + str(vid_height),13,7)
+      if sensor_crop1 != 0:
+	      text(10,3,1,1,str(sensor_crop1) + ": " + str(vid_width) + "x" + str(vid_height),13,7)
+      else:
+          text(10,3,1,1,"OFF: " + str(vid_width) + "x" + str(vid_height),13,7)
             
 Camera_Version()
 if st_mode == 1:
@@ -1005,7 +1015,7 @@ start_buffer()
 # setup camera 0 parameters
 def set_parameters():
     global mode,sspeed,picam2,awb,AF_f_mode,AF_focus,brightness,contrast,gain,ev,meter,saturation,sharpness,denoise,fps,use_gpio,IRF,IRF_on,led_sw_ir,led_sw_ir1
-    global a,b,h_crop,v_crop,swidth,sheight,fxx,fxy,fxz,fxa,AF_f_spot,Pi_Cam,vid_width,vid_height,sensor_mode,sw_crop,sh_crop,sensor_crop,HDRnight
+    global a,b,h_crop,v_crop,swidth,sheight,fxx,fxy,fxz,fxa,AF_f_spot,Pi_Cam,vid_width,vid_height,sensor_mode,sw_crop,sh_crop,sensor_crop,hdr,Pi
     if sensor_crop > 0:
         offset = [int((swidths[Pi_Cam]/2) - (vid_width/2)),int((sheights[Pi_Cam]/2) - (vid_height/2))]
         size   = [vid_width,vid_height ]
@@ -1082,10 +1092,15 @@ def set_parameters():
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Fast})
     elif denoise == 2:
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
-    if HDRnight == 1:
-        picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
-    else:
-        picam2.set_controls({"HdrMode": controls.HdrModeEnum.Off})
+    if Pi == 5:
+        if hdr == 0:
+            picam2.set_controls({"HdrMode": controls.HdrModeEnum.Off})
+        elif hdr == 1:
+            picam2.set_controls({"HdrMode": controls.HdrModeEnum.SingleExposure})
+        elif hdr == 2:
+            picam2.set_controls({"HdrMode": controls.HdrModeEnum.MultiExposure})
+        else:
+            picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
     if use_gpio == 1:
         if IRF_on == 0 and IRF == 2:
             led_sw_ir.off()
@@ -1097,7 +1112,7 @@ def set_parameters():
 # setup camera 1 parameters
 def set_parameters1():
     global mode1,sspeed1,picam2,awb1,AF_f_mode1,AF_focus1,brightness1,contrast1,gain1,ev1,meter1,saturation1,sharpness1,denoise1,fps1,use_gpio,IRF_on,IRF
-    global led_sw_ir,led_sw_ir1,a,b,h_crop,v_crop,swidth,sheight,fxx,fxy,fxz,fxa,AF_f_spot1,Pi_Cam,vid_width,vid_height,sensor_mode,swidths,sheights,HDRnight1
+    global led_sw_ir,led_sw_ir1,a,b,h_crop,v_crop,swidth,sheight,fxx,fxy,fxz,fxa,AF_f_spot1,Pi_Cam,vid_width,vid_height,sensor_mode,swidths,sheights,hdr1,Pi
     time.sleep(1)
     if sensor_crop > 0:
         offset = [int((swidths[Pi_Cam]/2) - (vid_width/2)),int((sheights[Pi_Cam]/2) - (vid_height/2))]
@@ -1175,10 +1190,15 @@ def set_parameters1():
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Fast})
     elif denoise1 == 2:
         picam2.set_controls({"NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality})
-    if HDRnight1 == 1:
-        picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
-    else:
-        picam2.set_controls({"HdrMode": controls.HdrModeEnum.Off})
+    if Pi == 5:
+        if hdr1 == 0:
+            picam2.set_controls({"HdrMode": controls.HdrModeEnum.Off})
+        elif hdr1 == 1:
+            picam2.set_controls({"HdrMode": controls.HdrModeEnum.SingleExposure})
+        elif hdr1 == 2:
+            picam2.set_controls({"HdrMode": controls.HdrModeEnum.MultiExposure})
+        else:
+            picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
     if use_gpio == 1:
         if IRF_on == 0 and IRF == 2:
             led_sw_ir.off()
@@ -1200,7 +1220,6 @@ print(USB_Files)
 if len(USB_Files) > 0:
     usedusb = os.statvfs(m_user + "/" + USB_Files[0] + "/")
     USB_storage = ((1 - (usedusb.f_bavail / usedusb.f_blocks)) * 100)
-    print(m_user + "/'" + USB_Files[0] + "'/Videos/")
     if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Videos/") :
         os.system('mkdir ' + m_user + "/'" + USB_Files[0] + "'/Videos/")
     if not os.path.exists(m_user + "/'" + USB_Files[0] + "'/Pictures/") :
@@ -1237,7 +1256,7 @@ else:
 
 def UTC_offsetter():
     global UTC_offset
-    # get UTC offset
+    # set UTC offset automatically
     data = os.popen("timedatectl").read().split("\n")
     l = datetime.strptime(str(data[0])[31:50], "%Y-%m-%d %H:%M:%S")
     u = datetime.strptime(str(data[1])[31:50], "%Y-%m-%d %H:%M:%S")
@@ -1439,6 +1458,7 @@ def watchdog(qq):
             os.system("reboot")
 
 if watch == True:
+    # watchdog
     qq = Queue()
     qq.put(time.monotonic())
     watch_thread = threading.Thread(target=watchdog, args=(qq,))
@@ -2608,11 +2628,8 @@ while True:
                             text(9,5,0,1,"Saturation",14,7)
                             text(9,3,1,1,str(saturation),14,7)
                         if Pi == 5:
-                            text(10,5,0,1,"Night",14,7)
-                            if HDRnight == 1:
-                                text(10,3,1,1,"ON",14,7)
-                            else:
-                                text(10,3,1,1,"OFF",14,7)
+                            text(10,5,0,1,"HDR",14,7)
+                            text(10,3,1,1,hdrs[hdr],14,7)
                         elif zoom == 0:
                             button(10,0)
                             text(10,2,0,1,"Zoom",14,7)
@@ -2685,7 +2702,10 @@ while True:
                         text(9,5,0,1,"Denoise",14,7)
                         text(9,3,1,1,str(denoises[denoise]),14,7)
                         text(10,2,0,1,"Crop Mode",14,7)
-                        text(10,3,1,1,str(sensor_crop) + ":" + str(vid_width) + "x" + str(vid_height),13,7)
+                        if sensor_crop0 != 0:
+                            text(10,3,1,1,str(sensor_crop0) + ":" + str(vid_width) + "x" + str(vid_height),13,7)
+                        else:
+                            text(10,3,1,1,"OFF:" + str(vid_width) + "x" + str(vid_height),13,7)
                         text(11,1,0,1,"MAIN MENU",14,7)
                         ir_on_time = (ir_on_hour * 60) + ir_on_mins
                         ir_of_time = (ir_of_hour * 60) + ir_of_mins
@@ -2973,11 +2993,8 @@ while True:
                             text(9,5,0,1,"Saturation",14,7)
                             text(9,3,1,1,str(saturation1),14,7)
                         if Pi == 5:
-                            text(10,5,0,1,"Night",14,7)
-                            if HDRnight1 == 1:
-                                text(10,3,1,1,"ON",14,7)
-                            else:
-                                text(10,3,1,1,"OFF",14,7)
+                            text(10,5,0,1,"HDR",14,7)
+                            text(10,3,1,1,hdrs[hdr1],14,7)
                         elif zoom == 0:
                             button(10,0)
                             text(10,2,0,1,"Zoom",14,7)
@@ -3046,7 +3063,10 @@ while True:
                         text(9,5,0,1,"Denoise",14,7)
                         text(9,3,1,1,str(denoises[denoise1]),14,7)
                         text(10,2,0,1,"Crop Mode",14,7)
-                        text(10,3,1,1,str(sensor_crop) + ":" + str(vid_width) + "x" + str(vid_height) ,14,7)
+                        if sensor_crop1 != 0:
+                            text(10,3,1,1,str(sensor_crop1) + ":" + str(vid_width) + "x" + str(vid_height) ,14,7)
+                        else:
+                            text(10,3,1,1,"OFF:" + str(vid_width) + "x" + str(vid_height) ,14,7)
                         if IRF_on == 0:
                             text(0,2,0,1,"IR Filter (OFF)",14,7)
                         else:
@@ -3451,17 +3471,20 @@ while True:
                   elif g == 10:
                       if Pi == 5:
                           if (h == 1 and event.button == 1) or event.button == 4:
-                              HDRnight +=1
-                              HDRnight = min(HDRnight,1)
+                              hdr +=1
+                              hdr = min(hdr,len(hdrs)-1)
                           else:
-                              HDRnight -=1
-                              HDRnight = max(HDRnight,0)
-                          if HDRnight == 1:
-                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
-                              text(10,3,1,1,"ON",14,7)
-                          else:
+                              hdr -=1
+                              hdr = max(hdr,0)
+                          if hdr == 0:
                               picam2.set_controls({"HdrMode": controls.HdrModeEnum.Off})
-                              text(10,3,1,1,"OFF",14,7)
+                          elif hdr == 1:
+                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.SingleExposure})
+                          elif hdr == 2:
+                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.MultiExposure})
+                          else:
+                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
+                          text(10,3,1,1,hdrs[hdr],14,7)
                           save_config = 1
                       else:
                         # ZOOM
@@ -3768,7 +3791,10 @@ while True:
                           sensor_crop0 -=1
                           sensor_crop0 = max(sensor_crop0,0)
                       text(10,2,0,1,"Crop Mode",14,7)
-                      text(10,3,1,1,str(sensor_crop0),14,7)
+                      if sensor_crop0 != 0:
+                          text(10,3,1,1,str(sensor_crop0),14,7)
+                      else:
+                          text(10,3,1,1,"OFF",14,7)
                       pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,0,scr_width-bw,scr_height))
                       pygame.display.update()
                       picam2.stop_recording()
@@ -5060,17 +5086,20 @@ while True:
                   elif g == 10:
                       if Pi == 5:
                           if (h == 1 and event.button == 1) or event.button == 4:
-                              HDRnight1 +=1
-                              HDRnight1 = min(HDRnight1,1)
+                              hdr1 +=1
+                              hdr1 = min(hdr1,len(hdrs)-1)
                           else:
-                              HDRnight1 -=1
-                              HDRnight1 = max(HDRnight1,0)
-                          if HDRnight1 == 1:
-                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
-                              text(10,3,1,1,"ON",14,7)
-                          else:
+                              hdr1 -=1
+                              hdr1 = max(hdr1,0)
+                          if hdr1 == 0:
                               picam2.set_controls({"HdrMode": controls.HdrModeEnum.Off})
-                              text(10,3,1,1,"OFF",14,7)
+                          elif hdr1 == 1:
+                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.SingleExposure})
+                          elif hdr1 == 2:
+                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.MultiExposure})
+                          else:
+                              picam2.set_controls({"HdrMode": controls.HdrModeEnum.Night})
+                          text(10,3,1,1,hdrs[hdr1],14,7)
                           save_config = 1
                       else:
                         # ZOOM
@@ -5372,7 +5401,10 @@ while True:
                           sensor_crop1 -=1
                           sensor_crop1 = max(sensor_crop1,0)
                       text(10,2,0,1,"Crop Mode",14,7)
-                      text(10,3,1,1,str(sensor_crop1),14,7)
+                      if sensor_crop1 != 0:
+                          text(10,3,1,1,str(sensor_crop1),14,7)
+                      else:
+                          text(10,3,1,1,"OFF",14,7)
                       picam2.stop_recording()
                       pref = pre_frames * 1000
                       circular = CircularOutput2(buffer_duration_ms=pref)
@@ -5480,8 +5512,8 @@ while True:
                 config[90] = ss_on_mins
                 config[91] = sensor_crop0
                 config[92] = sensor_crop1
-                config[93] = HDRnight
-                config[94] = HDRnight1
+                config[93] = hdr
+                config[94] = hdr1
                 with open(config_file, 'w') as f:
                     for item in config:
                         f.write("%s\n" % item)
